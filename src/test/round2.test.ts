@@ -90,7 +90,7 @@ describe('AUREX Round 2 Comprehensive Evidence Verification Suite', () => {
 01-Sep-2026,GOLDTEN,27-Nov-2026,7400,7450,7390,7420,5000,7000
 02-Sep-2026,GOLDM,invalid-date,74100,74600,74000,74300,9000,14000`;
 
-    const result = parseBhavcopyCsv(testCsv, 'test.csv', 'USER-IMPORTED MCX DATA');
+    const result = parseBhavcopyCsv(testCsv, 'test.csv', 'USER-IMPORTED DATA — SOURCE UNVERIFIED');
     expect(result.validRecords.length).toBe(2); // GOLDM on Sep 1, GOLDTEN on Sep 1
     expect(result.rejectedRows.length).toBe(3); // 1 duplicate, 1 SILVERM, 1 invalid-date
 
@@ -100,14 +100,19 @@ describe('AUREX Round 2 Comprehensive Evidence Verification Suite', () => {
     expect(reasons.some(r => r.includes('Invalid or unparseable'))).toBe(true);
   });
 
-  // Area 7: Bundled Official MCX Sample Parsing
-  it('7. should parse bundled official MCX Bhavcopy sample without errors', () => {
-    const result = parseBhavcopyCsv(SAMPLE_MCX_BHAVCOPY_CSV, 'sample.csv', 'OFFICIAL MCX DATA');
+  // Area 7: Bundled MCX Bhavcopy Sample Parsing
+  it('7. should parse bundled illustrative MCX Bhavcopy sample without errors', () => {
+    const result = parseBhavcopyCsv(
+      SAMPLE_MCX_BHAVCOPY_CSV,
+      'bundled_prototype_sample.csv',
+      'PROTOTYPE SAMPLE — UNVERIFIED SOURCING'
+    );
     expect(result.validRecords.length).toBeGreaterThan(50);
     expect(result.metadata.contractCoverage.GOLDM.count).toBeGreaterThan(10);
     expect(result.metadata.contractCoverage.GOLDTEN.count).toBeGreaterThan(10);
     expect(result.metadata.contractCoverage.GOLDGUINEA.count).toBeGreaterThan(10);
     expect(result.metadata.contractCoverage.GOLDPETAL.count).toBeGreaterThan(10);
+    expect(result.metadata.provenance).toBe('PROTOTYPE SAMPLE — UNVERIFIED SOURCING');
   });
 
   // Area 8: Contract Comparability Engine
@@ -174,7 +179,7 @@ describe('AUREX Round 2 Comprehensive Evidence Verification Suite', () => {
       pair: ['GOLDM', 'GOLDTEN'],
       obsA,
       obsB,
-      provenance: 'OFFICIAL MCX DATA',
+      provenance: 'OFFICIAL MCX DATA — SOURCE VERIFIED',
       friction: {
         slippagePer10g: 20,
         brokerageTaxesPer10g: 30,
@@ -258,16 +263,63 @@ describe('AUREX Round 2 Comprehensive Evidence Verification Suite', () => {
     expect(windows).toEqual([]);
   });
 
-  // Area 12: Provenance switching and service integrity
-  it('12. should track provenance transitions between Simulation, User Import, and Official Sample', () => {
-    expect(marketDataService.getProvenance()).toBeDefined();
+  // Area 12: Provenance transitions, user attestation semantics, and verification protections
+  it('12. should enforce truthful user-attestation semantics and protect official verified status', () => {
+    // 1. Initial state is Prototype Simulation
+    marketDataService.resetToSimulation();
+    expect(marketDataService.getProvenance()).toBe('PROTOTYPE SIMULATION');
+    expect(marketDataService.getDataHealthSummary().provenance).toBe('PROTOTYPE SIMULATION');
 
-    // Load official sample
-    marketDataService.loadOfficialSample();
-    expect(marketDataService.getProvenance()).toBe('OFFICIAL MCX DATA');
-    expect(marketDataService.getDataHealthSummary().provenance).toBe('OFFICIAL MCX DATA');
+    // Bundled simulation cannot accept user source attestation
+    expect(() => marketDataService.recordSourceAttestation('Test note')).toThrow(
+      'Synthetic simulation or bundled prototype samples cannot accept user source attestation.'
+    );
 
-    // Reset back to prototype simulation
+    // 2. Bundled sample loads as PROTOTYPE SAMPLE — UNVERIFIED SOURCING
+    marketDataService.loadBundledSample();
+    expect(marketDataService.getProvenance()).toBe('PROTOTYPE SAMPLE — UNVERIFIED SOURCING');
+    expect(marketDataService.getDataHealthSummary().provenance).toBe('PROTOTYPE SAMPLE — UNVERIFIED SOURCING');
+    expect(marketDataService.getDataHealthSummary().isVerified).toBe(false);
+    expect(marketDataService.getDataHealthSummary().isUserAttested).toBe(false);
+
+    // Bundled sample cannot accept user source attestation
+    expect(() => marketDataService.recordSourceAttestation('Test note')).toThrow(
+      'Synthetic simulation or bundled prototype samples cannot accept user source attestation.'
+    );
+
+    // 3. User CSV uploads start strictly as USER-IMPORTED DATA — SOURCE UNVERIFIED
+    marketDataService.importFromCsv(SAMPLE_MCX_BHAVCOPY_CSV, 'user_bhavcopy_sep2026.csv');
+    expect(marketDataService.getProvenance()).toBe('USER-IMPORTED DATA — SOURCE UNVERIFIED');
+    expect(marketDataService.getDataHealthSummary().provenance).toBe('USER-IMPORTED DATA — SOURCE UNVERIFIED');
+    expect(marketDataService.getDataHealthSummary().isVerified).toBe(false);
+    expect(marketDataService.getDataHealthSummary().isUserAttested).toBe(false);
+
+    // 4. Recording an attestation promotes ONLY to USER-ATTESTED SOURCE — NOT INDEPENDENTLY VERIFIED
+    marketDataService.recordSourceAttestation('Downloaded directly from MCX daily bhavcopy archive');
+    expect(marketDataService.getProvenance()).toBe('USER-ATTESTED SOURCE — NOT INDEPENDENTLY VERIFIED');
+    const healthAfterAttestation = marketDataService.getDataHealthSummary();
+    expect(healthAfterAttestation.provenance).toBe('USER-ATTESTED SOURCE — NOT INDEPENDENTLY VERIFIED');
+    expect(healthAfterAttestation.isUserAttested).toBe(true);
+    expect(healthAfterAttestation.isVerified).toBe(false); // MUST NOT be marked verified
+    expect(healthAfterAttestation.attestationNotes).toBe('Downloaded directly from MCX daily bhavcopy archive');
+    expect(healthAfterAttestation.attestationTimestamp).toBeDefined();
+
+    // 5. Arbitrary notes/self-certification CANNOT promote to official verified status
+    expect(() => marketDataService.verifyActiveDataset('Arbitrary self-certification notes')).toThrow(
+      'Independent official-source verification is unavailable'
+    );
+    // Provenance remains safely at USER-ATTESTED
+    expect(marketDataService.getProvenance()).toBe('USER-ATTESTED SOURCE — NOT INDEPENDENTLY VERIFIED');
+
+    // 6. Revoking attestation restores USER-IMPORTED DATA — SOURCE UNVERIFIED
+    marketDataService.revokeSourceAttestation();
+    expect(marketDataService.getProvenance()).toBe('USER-IMPORTED DATA — SOURCE UNVERIFIED');
+    const healthAfterRevocation = marketDataService.getDataHealthSummary();
+    expect(healthAfterRevocation.provenance).toBe('USER-IMPORTED DATA — SOURCE UNVERIFIED');
+    expect(healthAfterRevocation.isUserAttested).toBe(false);
+    expect(healthAfterRevocation.attestationNotes).toBeUndefined();
+
+    // 7. Reset back to prototype simulation
     marketDataService.resetToSimulation();
     expect(marketDataService.getProvenance()).toBe('PROTOTYPE SIMULATION');
     expect(marketDataService.getDataHealthSummary().provenance).toBe('PROTOTYPE SIMULATION');

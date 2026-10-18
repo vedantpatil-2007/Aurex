@@ -121,14 +121,16 @@ An 8-stage auditable breakdown proving every decision step-by-step:
 
 ---
 
-## 3. Data Provenance & Transparency
+## 3. Data Provenance & Quantitative Transparency
 
-AUREX maintains strict data provenance across all views:
-1. **`OFFICIAL MCX DATA`**: Ingested official MCX Daily Bhavcopy historical settlement observations.
-2. **`USER-IMPORTED MCX DATA`**: Custom user-uploaded MCX Bhavcopy CSV files processed and validated via Data Lab.
-3. **`PROTOTYPE SIMULATION`**: Calibrated deterministic simulation based on official MCX PS03 contract parameters and historical gold volatility.
+AUREX maintains strict data provenance classifications across all views:
+1. **`PROTOTYPE SIMULATION`**: Calibrated deterministic simulation based on official MCX PS03 contract parameters and historical gold volatility.
+2. **`PROTOTYPE SAMPLE — UNVERIFIED SOURCING`**: Bundled illustrative dataset formatted to MCX Bhavcopy schema for prototype demonstration; calibrated values without verified exchange archive sourcing.
+3. **`USER-IMPORTED DATA — SOURCE UNVERIFIED`**: User-provided Bhavcopy CSV files ingested and validated for format and schema, but whose official origin has not been independently verified.
+4. **`USER-ATTESTED SOURCE — NOT INDEPENDENTLY VERIFIED`**: Ingested datasets where the user has recorded a source assertion. *Uploading a file and recording a source attestation does not independently verify that the file originated from MCX. AUREX currently has no independent official-source verification mechanism. User-attested datasets remain independently unverified.*
+5. **`OFFICIAL MCX DATA — SOURCE VERIFIED`**: Strictly reserved for independent, evidence-backed exchange verification (currently unavailable until an independent verification authority is integrated).
 
-> **Honesty Principle**: Daily settlement marks serve as liquidity proxies; order-book microstructure is estimated. AUREX never manufactures continuous synthetic roll curves by forward-filling missing prices.
+> **Quantitative Honesty Principle**: Daily settlement marks serve as liquidity proxies; order-book microstructure is estimated. AUREX never manufactures continuous synthetic roll curves by forward-filling missing prices.
 
 ---
 
@@ -196,7 +198,7 @@ npm test
 ## 7. Recommended 2-Minute Judge Demonstration Script
 
 1. **Step 1 — Overview (`/overview`)**: Review the PS03 problem statement and active monitored contracts.
-2. **Step 2 — Data Lab (`/data-lab`)**: Click **"Load Official Sample CSV"** to demonstrate real-time parsing, column auto-detection, duplicate checking, rejection inspection, and discrete contract coverage.
+2. **Step 2 — Data Lab (`/data-lab`)**: Click **"Load Bundled Sample CSV"** to demonstrate real-time parsing, column auto-detection, duplicate checking, rejection inspection, and discrete contract coverage under unverified sample sourcing.
 3. **Step 3 — Contract Universe (`/contracts`)**: Inspect the structural difference between GOLDM (100g lot, 10g quote) and GOLDTEN (10g lot, 1g quote), and view the discrete expiry lifecycle timeline.
 4. **Step 4 — Normalization Engine (`/normalization`)**: Observe how raw prices are adjusted by quotation multiplier and fineness adjustment into ₹ / 10g @ 999 parity.
 5. **Step 5 — Relative Value Lab (`/relative-value`)**: Select pair `GOLDM / GOLDTEN`, explore the 20D rolling Z-Score bands, and inspect the 4-part **Quantitative Interpretation Panel** (*What Moved, Why Might It Matter, What Invalidates, Missing Evidence*).

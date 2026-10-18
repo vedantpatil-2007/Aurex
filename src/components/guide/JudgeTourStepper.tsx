@@ -36,7 +36,7 @@ export const JUDGE_STEPS: JudgeWalkthroughStep[] = [
     title: '2. Data Health & Provenance',
     targetPage: 'data-lab',
     instruction: 'Verify data source provenance and audit status.',
-    detail: 'Transparently inspect whether data is Official MCX, User-Imported CSV, or Calibrated Prototype Simulation. Notice explicit tracking of discrete expiries and zero synthetic roll stitching.',
+    detail: 'Transparently inspect data provenance: Verified Official MCX, User-Attested (Unverified), User-Imported (Unverified), Bundled Prototype Sample (Unverified), or Prototype Simulation. Notice explicit tracking of discrete expiries and zero synthetic roll stitching.',
     focusContract: 'GOLDM'
   },
   {

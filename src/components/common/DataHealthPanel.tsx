@@ -18,7 +18,20 @@ export const DataHealthPanel: React.FC<DataHealthPanelProps> = ({
 
   const handleDownloadReport = () => {
     const metadata = marketDataService.getMetadata();
-    const blob = new Blob([JSON.stringify(metadata, null, 2)], { type: 'application/json' });
+    const auditPayload = {
+      ...metadata,
+      auditCertification: {
+        provenanceClassification: safeHealth.provenance,
+        isUserAttested: metadata.isUserAttested ?? false,
+        attestationNotes: metadata.attestationNotes || null,
+        attestationTimestamp: metadata.attestationTimestamp || null,
+        isIndependentlyVerified: false,
+        independentVerificationStatus: 'NOT_INDEPENDENTLY_VERIFIED',
+        verificationDisclaimer: 'Uploading a file and recording a source attestation does not independently verify that the file originated from MCX. AUREX currently has no independent official-source verification mechanism. User-attested datasets remain independently unverified.'
+      },
+      exportedAt: new Date().toISOString()
+    };
+    const blob = new Blob([JSON.stringify(auditPayload, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
@@ -71,11 +84,15 @@ export const DataHealthPanel: React.FC<DataHealthPanelProps> = ({
             Data Health & Integrity Status
           </h3>
           <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded uppercase ${
-            safeHealth.provenance === 'OFFICIAL MCX DATA'
+            safeHealth.provenance === 'OFFICIAL MCX DATA — SOURCE VERIFIED'
               ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-              : safeHealth.provenance === 'USER-IMPORTED MCX DATA'
+              : safeHealth.provenance === 'USER-ATTESTED SOURCE — NOT INDEPENDENTLY VERIFIED'
+              ? 'bg-teal-100 text-teal-800 border border-teal-300'
+              : safeHealth.provenance === 'USER-IMPORTED DATA — SOURCE UNVERIFIED'
               ? 'bg-sky-100 text-sky-800 border border-sky-300'
-              : 'bg-amber-100 text-amber-800 border border-amber-300'
+              : safeHealth.provenance === 'PROTOTYPE SAMPLE — UNVERIFIED SOURCING'
+              ? 'bg-amber-100 text-amber-900 border border-amber-300'
+              : 'bg-slate-100 text-slate-800 border border-slate-300'
           }`}>
             {safeHealth.provenance}
           </span>

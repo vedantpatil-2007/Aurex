@@ -1,12 +1,19 @@
 /**
- * Authentic Pre-packaged MCX Bhavcopy Historical Sample Dataset.
- * Format corresponds directly to standard official MCX Daily Bhavcopy exports.
+ * PROTOTYPE SAMPLE — UNVERIFIED SOURCING
+ *
+ * Calibrated MCX Bhavcopy Schema Sample Dataset.
+ * Format corresponds to standard official MCX Daily Bhavcopy export schema for prototype demonstration.
+ *
+ * IMPORTANT DATA INTEGRITY DISCLOSURE:
+ * - This dataset is calibrated to realistic Indian gold pricing curves and official PS03 parameters.
+ * - It was NOT downloaded directly from an official MCX Bhavcopy archive.
+ * - Provenance classification is strictly 'PROTOTYPE SAMPLE — UNVERIFIED SOURCING'.
+ * - Must NOT be displayed or treated as verified official exchange data.
  * 
  * Includes:
- * - Real discrete expiries (05-NOV-2026 for GOLDM, 27-NOV-2026 for GOLDTEN, GOLDGUINEA, GOLDPETAL)
- * - Actual quotation units (GOLDM 10g, GOLDTEN 1g, GOLDGUINEA 8g, GOLDPETAL 1g)
+ * - Calibrated expiries (05-NOV-2026 for GOLDM, 27-NOV-2026 for GOLDTEN, GOLDGUINEA, GOLDPETAL)
+ * - Calibrated quotation units (GOLDM 10g, GOLDTEN 1g, GOLDGUINEA 8g, GOLDPETAL 1g)
  * - Purity standards (995 for GOLDM/GOLDTEN, 999 for GOLDGUINEA/GOLDPETAL)
- * - Multi-session historical observations with genuine volume and open interest metrics.
  * - Intentional edge rows (e.g., SILVERM non-PS03 commodity) to demonstrate rejection inspection.
  */
 

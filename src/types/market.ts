@@ -131,7 +131,12 @@ export interface DataQualityReport {
   }[];
 }
 
-export type DataProvenance = 'OFFICIAL MCX DATA' | 'USER-IMPORTED MCX DATA' | 'PROTOTYPE SIMULATION';
+export type DataProvenance =
+  | 'PROTOTYPE SIMULATION'
+  | 'PROTOTYPE SAMPLE — UNVERIFIED SOURCING'
+  | 'USER-IMPORTED DATA — SOURCE UNVERIFIED'
+  | 'USER-ATTESTED SOURCE — NOT INDEPENDENTLY VERIFIED'
+  | 'OFFICIAL MCX DATA — SOURCE VERIFIED';
 
 export interface ContractCoverageItem {
   count: number;
@@ -153,6 +158,11 @@ export interface DatasetMetadata {
   contractCoverage: Record<ContractSymbol, ContractCoverageItem>;
   knownLimitations: string[];
   sourceClassification: string;
+  isUserAttested?: boolean;
+  attestationNotes?: string;
+  attestationTimestamp?: string;
+  isVerified?: boolean;
+  verificationNotes?: string;
 }
 
 export interface RejectedRow {
@@ -173,6 +183,11 @@ export interface DataHealthSummary {
   contractCoverage: string;
   importTimestamp?: string;
   filename?: string;
+  isUserAttested?: boolean;
+  attestationNotes?: string;
+  attestationTimestamp?: string;
+  isVerified?: boolean;
+  verificationNotes?: string;
 }
 
 export type ComparabilityClassification = 

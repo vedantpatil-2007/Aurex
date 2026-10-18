@@ -1,5 +1,5 @@
 import React from 'react';
-import { AlertTriangle, ShieldCheck, Database, ArrowRight, CheckCircle2 } from 'lucide-react';
+import { AlertTriangle, ShieldCheck, Database, ArrowRight, CheckCircle2, FileQuestion } from 'lucide-react';
 import { DataProvenance } from '../../types/market';
 
 interface PrototypeBannerProps {
@@ -15,20 +15,30 @@ export const PrototypeBanner: React.FC<PrototypeBannerProps> = ({
   dataQualityStatus = 'PASS',
   onNavigateToDataLab
 }) => {
-  const isOfficial = provenance === 'OFFICIAL MCX DATA';
-  const isUserImported = provenance === 'USER-IMPORTED MCX DATA';
+  const isOfficial = provenance === 'OFFICIAL MCX DATA — SOURCE VERIFIED';
+  const isAttested = provenance === 'USER-ATTESTED SOURCE — NOT INDEPENDENTLY VERIFIED';
+  const isUserImported = provenance === 'USER-IMPORTED DATA — SOURCE UNVERIFIED';
+  const isSample = provenance === 'PROTOTYPE SAMPLE — UNVERIFIED SOURCING';
 
   const badgeColor = isOfficial
     ? 'bg-emerald-600 text-white'
+    : isAttested
+    ? 'bg-teal-700 text-white'
     : isUserImported
-    ? 'bg-sky-600 text-white'
-    : 'bg-amber-600 text-white';
+    ? 'bg-sky-700 text-white'
+    : isSample
+    ? 'bg-amber-600 text-slate-950 font-black'
+    : 'bg-slate-700 text-amber-300';
 
   const containerBg = isOfficial
     ? 'bg-emerald-50/70 border-emerald-200 text-emerald-950'
+    : isAttested
+    ? 'bg-teal-50/70 border-teal-200 text-teal-950'
     : isUserImported
     ? 'bg-sky-50/70 border-sky-200 text-sky-950'
-    : 'bg-amber-50/70 border-amber-200 text-amber-950';
+    : isSample
+    ? 'bg-amber-50/80 border-amber-300 text-amber-950'
+    : 'bg-slate-50 border-slate-200 text-slate-800';
 
   return (
     <div className={`border-b px-4 py-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs font-medium transition-colors ${containerBg}`}>
@@ -39,9 +49,13 @@ export const PrototypeBanner: React.FC<PrototypeBannerProps> = ({
         </span>
         <span className="text-slate-700">
           {isOfficial ? (
-            <span>Verified historical MCX Daily Bhavcopy settlement dataset with discrete contracts.</span>
+            <span>Verified official MCX Daily Bhavcopy settlement dataset with discrete contracts (source verified).</span>
+          ) : isAttested ? (
+            <span>User-attested file: <strong className="font-mono">{filename || 'custom_bhavcopy.csv'}</strong>. User asserted source origin; NOT independently verified.</span>
           ) : isUserImported ? (
-            <span>User-provided file: <strong className="font-mono">{filename || 'custom_bhavcopy.csv'}</strong>. Discrete contract expiries verified.</span>
+            <span>User-provided file: <strong className="font-mono">{filename || 'custom_bhavcopy.csv'}</strong>. Parsed and checked; official origin unverified.</span>
+          ) : isSample ? (
+            <span>Bundled illustrative sample in MCX Bhavcopy schema. Calibrated values; unverified exchange sourcing.</span>
           ) : (
             <span>Calibrated prototype simulation based on official MCX PS03 contract parameters.</span>
           )}

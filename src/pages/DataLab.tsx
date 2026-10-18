@@ -48,6 +48,9 @@ export const DataLab: React.FC<DataLabProps> = ({
   const [customMapping, setCustomMapping] = useState<Partial<ColumnMapping>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [showAttestationModal, setShowAttestationModal] = useState(false);
+  const [attestationNotesInput, setAttestationNotesInput] = useState('User asserted origin from official MCX Bhavcopy archive');
+
   // Handle file selection
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -61,7 +64,7 @@ export const DataLab: React.FC<DataLabProps> = ({
       const text = event.target?.result as string;
       setCsvRawText(text);
       try {
-        const preview = parseBhavcopyCsv(text, file.name, 'USER-IMPORTED MCX DATA');
+        const preview = parseBhavcopyCsv(text, file.name, 'USER-IMPORTED DATA — SOURCE UNVERIFIED');
         setParsePreview(preview);
         setCustomMapping(preview.columnMapping);
         setActiveTab('preview');
@@ -72,18 +75,35 @@ export const DataLab: React.FC<DataLabProps> = ({
     reader.readAsText(file);
   };
 
-  // Load bundled authentic official MCX Bhavcopy sample
-  const handleLoadOfficialSample = () => {
+  // Load bundled illustrative MCX Bhavcopy sample (Unverified)
+  const handleLoadBundledSample = () => {
     try {
-      const res = marketDataService.loadOfficialSample();
+      const res = marketDataService.loadBundledSample();
       setParsePreview(res);
       setSelectedFile(null);
       setCsvRawText(SAMPLE_MCX_BHAVCOPY_CSV);
       onDatasetChanged();
       setActiveTab('current');
     } catch (err: any) {
-      setParseError(err.message || 'Failed to load official sample dataset.');
+      setParseError(err.message || 'Failed to load bundled sample dataset.');
     }
+  };
+
+  // User attestation handler (asserts origin without claiming independent verification)
+  const handleRecordAttestation = () => {
+    try {
+      marketDataService.recordSourceAttestation(attestationNotesInput);
+      onDatasetChanged();
+      setShowAttestationModal(false);
+    } catch (err: any) {
+      setParseError(err.message || 'Attestation failed.');
+    }
+  };
+
+  // Revoke user attestation and restore unverified status
+  const handleRevokeAttestation = () => {
+    marketDataService.revokeSourceAttestation();
+    onDatasetChanged();
   };
 
   // Confirm and commit uploaded dataset into active memory
@@ -133,7 +153,17 @@ export const DataLab: React.FC<DataLabProps> = ({
       datasetMetadata: metadata,
       provenance,
       generatedAt: new Date().toISOString(),
-      reportStatus: metadata.rejectedRows > 0 ? 'WARN' : 'PASS'
+      reportStatus: metadata.rejectedRows > 0 ? 'WARN' : 'PASS',
+      sourceAttestation: metadata.isUserAttested ? {
+        status: 'USER_ATTESTED_ONLY',
+        notes: metadata.attestationNotes,
+        timestamp: metadata.attestationTimestamp,
+        independentVerification: 'NOT_INDEPENDENTLY_VERIFIED',
+        disclaimer: 'Uploading a file and recording a source attestation does not independently verify that the file originated from MCX. AUREX currently has no independent official-source verification mechanism. User-attested datasets remain independently unverified.'
+      } : {
+        status: 'UNATTESTED',
+        independentVerification: 'NOT_INDEPENDENTLY_VERIFIED'
+      }
     };
     const blob = new Blob([JSON.stringify(reportData, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -155,25 +185,25 @@ export const DataLab: React.FC<DataLabProps> = ({
             <span className="text-xs uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-slate-900 text-amber-400 font-mono">
               Priority One
             </span>
-            <span className="text-xs text-slate-500 font-medium">Official Data Pipeline & Provenance</span>
+            <span className="text-xs text-slate-500 font-medium">Market Data Pipeline & Provenance Audit</span>
           </div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight mt-1 font-mono">
             Data Lab & Provenance
           </h1>
           <p className="text-xs text-slate-600 mt-1 max-w-2xl">
-            Ingest official MCX Bhavcopy CSV files, preview and map columns, inspect validation and rejections, and verify provenance across all analytical engines.
+            Ingest Bhavcopy CSV files, preview and map columns, inspect validation and rejections, and track transparent provenance across all analytical engines.
           </p>
         </div>
 
         {/* Action buttons */}
-        <div className="flex items-center gap-2 self-start">
+        <div className="flex items-center gap-2 self-start flex-wrap">
           <button
-            onClick={handleLoadOfficialSample}
-            className="px-3 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded-lg text-xs transition-colors flex items-center gap-1.5 shadow-sm font-mono"
-            title="Load authentic pre-packaged MCX Bhavcopy CSV dataset"
+            onClick={handleLoadBundledSample}
+            className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg text-xs transition-colors flex items-center gap-1.5 shadow-sm font-mono"
+            title="Load bundled illustrative MCX Bhavcopy CSV sample (Unverified)"
           >
             <Database className="w-3.5 h-3.5" />
-            <span>Load Official Sample CSV</span>
+            <span>Load Bundled Sample CSV</span>
           </button>
           <button
             onClick={handleResetToSimulation}
@@ -188,44 +218,91 @@ export const DataLab: React.FC<DataLabProps> = ({
 
       {/* Provenance Status Banner */}
       <div className={`p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
-        provenance === 'OFFICIAL MCX DATA' 
+        provenance === 'OFFICIAL MCX DATA — SOURCE VERIFIED'
           ? 'bg-emerald-50 border-emerald-300 text-emerald-950'
-          : provenance === 'USER-IMPORTED MCX DATA'
+          : provenance === 'USER-ATTESTED SOURCE — NOT INDEPENDENTLY VERIFIED'
+          ? 'bg-teal-50 border-teal-300 text-teal-950'
+          : provenance === 'USER-IMPORTED DATA — SOURCE UNVERIFIED'
           ? 'bg-sky-50 border-sky-300 text-sky-950'
+          : provenance === 'PROTOTYPE SAMPLE — UNVERIFIED SOURCING'
+          ? 'bg-indigo-50 border-indigo-300 text-indigo-950'
           : 'bg-amber-50 border-amber-300 text-amber-950'
       }`}>
         <div className="flex items-center gap-3">
-          <div className={`w-9 h-9 rounded-lg flex items-center justify-center font-bold text-sm ${
-            provenance === 'OFFICIAL MCX DATA'
+          <div className={`w-9 h-9 rounded-lg flex items-center justify-center font-bold text-sm shrink-0 ${
+            provenance === 'OFFICIAL MCX DATA — SOURCE VERIFIED'
               ? 'bg-emerald-600 text-white'
-              : provenance === 'USER-IMPORTED MCX DATA'
+              : provenance === 'USER-ATTESTED SOURCE — NOT INDEPENDENTLY VERIFIED'
+              ? 'bg-teal-700 text-white'
+              : provenance === 'USER-IMPORTED DATA — SOURCE UNVERIFIED'
               ? 'bg-sky-600 text-white'
+              : provenance === 'PROTOTYPE SAMPLE — UNVERIFIED SOURCING'
+              ? 'bg-indigo-600 text-white'
               : 'bg-amber-600 text-white'
           }`}>
             <Database className="w-5 h-5" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs uppercase font-mono font-bold tracking-wider px-2 py-0.5 rounded bg-white/80 border shadow-sm">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs uppercase font-mono font-bold tracking-wider px-2 py-0.5 rounded bg-white/90 border shadow-sm">
                 Active Source: {provenance}
               </span>
               <span className="text-xs text-slate-600 font-mono">
                 {metadata.filename || 'internal'}
               </span>
+              {metadata.isUserAttested && (
+                <span className="text-[10px] uppercase font-mono font-bold px-1.5 py-0.5 rounded bg-teal-100 text-teal-800 border border-teal-300">
+                  User Attested (Unverified)
+                </span>
+              )}
+              {metadata.isVerified && (
+                <span className="text-[10px] uppercase font-mono font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-300">
+                  Independent Audit Passed
+                </span>
+              )}
             </div>
             <div className="text-xs text-slate-700 mt-0.5">
               {metadata.sourceClassification} • Date Range: {metadata.dateRange.start} to {metadata.dateRange.end} ({metadata.totalRows} observations)
             </div>
+            {metadata.attestationNotes && (
+              <div className="text-[11px] text-teal-900 font-mono mt-0.5 italic">
+                Attestation: {metadata.attestationNotes} ({metadata.attestationTimestamp?.slice(0, 10)})
+              </div>
+            )}
           </div>
         </div>
 
-        <button
-          onClick={handleDownloadDataReport}
-          className="px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 rounded-md text-xs font-mono font-medium shadow-sm transition-colors flex items-center gap-1.5 self-start sm:self-auto"
-        >
-          <Download className="w-3.5 h-3.5 text-slate-600" />
-          <span>Download Quality Audit</span>
-        </button>
+        <div className="flex items-center gap-2 flex-wrap self-start sm:self-auto">
+          {provenance === 'USER-IMPORTED DATA — SOURCE UNVERIFIED' && (
+            <button
+              onClick={() => setShowAttestationModal(true)}
+              className="px-3 py-1.5 bg-teal-700 hover:bg-teal-800 text-white rounded-md text-xs font-mono font-bold shadow-sm transition-colors flex items-center gap-1.5"
+              title="Record user assertion of source origin (not independently verified)"
+            >
+              <FileText className="w-3.5 h-3.5" />
+              <span>Record Source Attestation</span>
+            </button>
+          )}
+
+          {provenance === 'USER-ATTESTED SOURCE — NOT INDEPENDENTLY VERIFIED' && (
+            <button
+              onClick={handleRevokeAttestation}
+              className="px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-md text-xs font-mono font-medium shadow-sm transition-colors flex items-center gap-1.5"
+              title="Revoke user attestation and return dataset to unverified"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Revoke Attestation</span>
+            </button>
+          )}
+
+          <button
+            onClick={handleDownloadDataReport}
+            className="px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 rounded-md text-xs font-mono font-medium shadow-sm transition-colors flex items-center gap-1.5"
+          >
+            <Download className="w-3.5 h-3.5 text-slate-600" />
+            <span>Download Quality Audit</span>
+          </button>
+        </div>
       </div>
 
       {/* CSV Upload / Drag-and-Drop Area */}
@@ -252,7 +329,7 @@ export const DataLab: React.FC<DataLabProps> = ({
             <span className="text-xs text-slate-500">or drag and drop here</span>
           </div>
           <p className="text-xs text-slate-500">
-            Supports official MCX daily bhavcopy formats. Auto-detects columns: Date, Symbol, Expiry, Open, High, Low, Close, Volume, Open Interest.
+            Supports standard MCX daily bhavcopy CSV formats. Auto-detects columns: Date, Symbol, Expiry, Open, High, Low, Close, Volume, Open Interest.
           </p>
           <div className="flex items-center justify-center gap-3 pt-1">
             <button
@@ -384,9 +461,18 @@ export const DataLab: React.FC<DataLabProps> = ({
           <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-2">
             <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5 font-mono">
               <ShieldCheck className="w-4 h-4 text-amber-600" />
-              Verified Data Provenance & Limitations
+              Data Provenance & Quantitative Limitations
             </h4>
-            <ul className="text-xs text-slate-600 space-y-1 list-disc pl-5">
+            <div className="p-3 rounded-lg bg-amber-50/80 border border-amber-200 text-xs text-amber-950 space-y-1">
+              <div className="font-bold flex items-center gap-1.5 text-amber-900 font-mono text-[11px] uppercase">
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-700" />
+                <span>Verification Scope & Honesty Disclosure</span>
+              </div>
+              <p className="leading-relaxed">
+                Uploading a file and recording a source attestation does not independently verify that the file originated from MCX. AUREX currently has no independent official-source verification mechanism. User-attested datasets remain independently unverified.
+              </p>
+            </div>
+            <ul className="text-xs text-slate-600 space-y-1 list-disc pl-5 pt-1">
               {metadata.knownLimitations.map((lim, idx) => (
                 <li key={idx}>{lim}</li>
               ))}
@@ -487,6 +573,68 @@ export const DataLab: React.FC<DataLabProps> = ({
                   ))}
                 </tbody>
               </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Explicit User Source Attestation Modal */}
+      {showAttestationModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl max-w-md w-full p-5 space-y-4 shadow-xl border border-slate-200">
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 rounded-full bg-teal-100 text-teal-700 flex items-center justify-center shrink-0">
+                <FileText className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-900 text-sm font-mono">
+                  Record User Source Attestation
+                </h3>
+                <p className="text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded p-2 mt-1 leading-relaxed">
+                  <strong>Quantitative Integrity Notice:</strong> Uploading a file and recording a source attestation does not independently verify that the file originated from MCX. AUREX currently has no independent official-source verification mechanism. User-attested datasets remain independently unverified.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div className="bg-slate-50 p-2.5 rounded border border-slate-200 space-y-1 font-mono text-[11px]">
+                <div>File: <strong className="text-slate-900">{metadata.filename}</strong></div>
+                <div>Imported at: {metadata.importTimestamp}</div>
+                <div>Date Range: {metadata.dateRange.start} → {metadata.dateRange.end}</div>
+                <div>Observations: {metadata.validRows} valid rows</div>
+                <div className="text-slate-600 text-[10px] pt-1 border-t border-slate-200 mt-1">
+                  Resulting Classification: <span className="font-bold text-teal-800">USER-ATTESTED SOURCE — NOT INDEPENDENTLY VERIFIED</span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Attestation Statement / Source Reference:
+                </label>
+                <input
+                  type="text"
+                  value={attestationNotesInput}
+                  onChange={(e) => setAttestationNotesInput(e.target.value)}
+                  className="w-full px-2.5 py-1.5 border border-slate-300 rounded text-xs font-mono focus:border-teal-600 focus:outline-none"
+                  placeholder="e.g. MCX official bhavcopy archive file download"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                onClick={() => setShowAttestationModal(false)}
+                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded text-xs"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleRecordAttestation}
+                className="px-3.5 py-1.5 bg-teal-700 hover:bg-teal-800 text-white font-bold rounded text-xs font-mono flex items-center gap-1.5"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span>Record Attestation (Unverified)</span>
+              </button>
             </div>
           </div>
         </div>

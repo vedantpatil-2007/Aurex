@@ -163,7 +163,7 @@ export function detectColumnMapping(headers: string[]): ColumnMapping {
 export function parseBhavcopyCsv(
   csvContent: string,
   sourceFilename = 'manual_import.csv',
-  provenance: DataProvenance = 'USER-IMPORTED MCX DATA',
+  provenance: DataProvenance = 'USER-IMPORTED DATA — SOURCE UNVERIFIED',
   customMapping?: Partial<ColumnMapping>
 ): ParseResult {
   const lines = csvContent
@@ -345,14 +345,19 @@ export function parseBhavcopyCsv(
     dateRange,
     contractCoverage: finalCoverage,
     knownLimitations: [
+      'Uploading a file and recording a source attestation does not independently verify that the file originated from MCX. AUREX currently has no independent official-source verification mechanism. User-attested datasets remain independently unverified.',
       'Volume reflects reported traded lots/contracts per exchange bhavcopy; order-book microstructure is estimated.',
       'Settlement prices reflect official closing mark; intraday spread volatility is not captured in end-of-day data.',
       'Contracts with discrete expiries are evaluated without continuous roll stitching.'
     ],
-    sourceClassification: provenance === 'OFFICIAL MCX DATA' 
-      ? 'Official Exchange Settlement Feed'
-      : provenance === 'USER-IMPORTED MCX DATA'
-      ? 'User-Provided Bhavcopy CSV File'
+    sourceClassification: provenance === 'OFFICIAL MCX DATA — SOURCE VERIFIED'
+      ? 'Official Exchange Settlement Feed (Source Verified)'
+      : provenance === 'USER-ATTESTED SOURCE — NOT INDEPENDENTLY VERIFIED'
+      ? 'User-Attested Bhavcopy CSV File (Not Independently Verified)'
+      : provenance === 'USER-IMPORTED DATA — SOURCE UNVERIFIED'
+      ? 'User-Provided Bhavcopy CSV File (Source Unverified)'
+      : provenance === 'PROTOTYPE SAMPLE — UNVERIFIED SOURCING'
+      ? 'Bundled Prototype Sample (Unverified Sourcing)'
       : 'Calibrated Prototype Simulation'
   };
 

@@ -92,10 +92,14 @@ export const Validation: React.FC<ValidationPageProps> = ({
             Walk-Forward Testing Protocol
           </h3>
           <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded font-mono ${
-            provenance === 'OFFICIAL MCX DATA'
+            provenance === 'OFFICIAL MCX DATA — SOURCE VERIFIED'
               ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-              : provenance === 'USER-IMPORTED MCX DATA'
+              : provenance === 'USER-ATTESTED SOURCE — NOT INDEPENDENTLY VERIFIED'
+              ? 'bg-teal-100 text-teal-800 border border-teal-300'
+              : provenance === 'USER-IMPORTED DATA — SOURCE UNVERIFIED'
               ? 'bg-sky-100 text-sky-800 border border-sky-300'
+              : provenance === 'PROTOTYPE SAMPLE — UNVERIFIED SOURCING'
+              ? 'bg-indigo-100 text-indigo-800 border border-indigo-300'
               : 'bg-amber-100 text-amber-800 border border-amber-300'
           }`}>
             {provenance}
