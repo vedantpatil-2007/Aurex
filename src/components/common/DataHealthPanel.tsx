@@ -1,20 +1,32 @@
 import React from 'react';
 import { DataHealthSummary } from '../../types/market';
-import { ShieldCheck, Database, Calendar, Layers, Activity } from 'lucide-react';
+import { ShieldCheck, Database, Calendar, Layers, Activity, ArrowRight, Download } from 'lucide-react';
+import { marketDataService } from '../../services/marketDataService';
 
 interface DataHealthPanelProps {
   health?: DataHealthSummary;
   compact?: boolean;
+  onOpenDataLab?: () => void;
 }
 
-export const DataHealthPanel: React.FC<DataHealthPanelProps> = ({ health, compact = false }) => {
-  const safeHealth = health || {
-    source: 'Historical MCX / Prototype Simulation',
-    totalRecords: 240,
-    contractsCount: 4,
-    lastAvailableDate: '2026-10-08',
-    qualityStatus: 'PASS' as const,
-    contractCoverage: '4 / 4 Monitored'
+export const DataHealthPanel: React.FC<DataHealthPanelProps> = ({ 
+  health, 
+  compact = false,
+  onOpenDataLab
+}) => {
+  const safeHealth = health || marketDataService.getDataHealthSummary();
+
+  const handleDownloadReport = () => {
+    const metadata = marketDataService.getMetadata();
+    const blob = new Blob([JSON.stringify(metadata, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `AUREX_Data_Quality_Report_${safeHealth.provenance.replace(/\s+/g, '_')}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   if (compact) {
@@ -51,27 +63,52 @@ export const DataHealthPanel: React.FC<DataHealthPanelProps> = ({ health, compac
   }
 
   return (
-    <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
-      <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+    <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm space-y-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-100">
         <div className="flex items-center gap-2">
           <Activity className="w-4 h-4 text-amber-600" />
           <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 font-mono">
             Data Health & Integrity Status
           </h3>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-          <span className="text-xs font-mono font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-            AUDIT: {safeHealth.qualityStatus}
+          <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded uppercase ${
+            safeHealth.provenance === 'OFFICIAL MCX DATA'
+              ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+              : safeHealth.provenance === 'USER-IMPORTED MCX DATA'
+              ? 'bg-sky-100 text-sky-800 border border-sky-300'
+              : 'bg-amber-100 text-amber-800 border border-amber-300'
+          }`}>
+            {safeHealth.provenance}
           </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleDownloadReport}
+            className="text-xs text-slate-600 hover:text-slate-900 font-mono flex items-center gap-1 px-2 py-1 rounded bg-slate-50 hover:bg-slate-100 border border-slate-200"
+            title="Download full JSON provenance report"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>Audit JSON</span>
+          </button>
+          {onOpenDataLab && (
+            <button
+              onClick={onOpenDataLab}
+              className="text-xs text-amber-800 hover:text-amber-900 font-mono font-bold flex items-center gap-1 px-2.5 py-1 rounded bg-amber-50 hover:bg-amber-100 border border-amber-200"
+            >
+              <span>Manage in Data Lab</span>
+              <ArrowRight className="w-3 h-3" />
+            </button>
+          )}
         </div>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3 text-xs font-mono">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-mono">
         <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-100">
           <div className="text-[10px] font-sans uppercase font-medium text-slate-400">Data Source</div>
           <div className="font-bold text-slate-900 mt-0.5 truncate" title={safeHealth.source}>
             {safeHealth.source}
+          </div>
+          <div className="text-[10px] text-slate-500 mt-0.5 truncate">
+            {safeHealth.filename || 'internal'}
           </div>
         </div>
 
@@ -80,6 +117,9 @@ export const DataHealthPanel: React.FC<DataHealthPanelProps> = ({ health, compac
           <div className="font-bold text-slate-900 mt-0.5">
             {safeHealth.totalRecords} Rows
           </div>
+          <div className="text-[10px] text-emerald-700 mt-0.5">
+            {safeHealth.validRecords} Valid ({safeHealth.rejectedRecords} Rejected)
+          </div>
         </div>
 
         <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-100">
@@ -87,12 +127,18 @@ export const DataHealthPanel: React.FC<DataHealthPanelProps> = ({ health, compac
           <div className="font-bold text-slate-900 mt-0.5">
             {safeHealth.contractsCount} / 4 Contracts
           </div>
+          <div className="text-[10px] text-slate-500 mt-0.5">
+            Discrete expiries only
+          </div>
         </div>
 
         <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-100">
-          <div className="text-[10px] font-sans uppercase font-medium text-slate-400">Last Observation</div>
+          <div className="text-[10px] font-sans uppercase font-medium text-slate-400">Latest Session</div>
           <div className="font-bold text-slate-900 mt-0.5">
             {safeHealth.lastAvailableDate}
+          </div>
+          <div className="text-[10px] text-slate-500 mt-0.5">
+            Quality: {safeHealth.qualityStatus}
           </div>
         </div>
       </div>

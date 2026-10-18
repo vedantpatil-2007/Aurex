@@ -7,11 +7,13 @@ import { ShieldCheck, ArrowRight, Info, CheckCircle2, AlertTriangle, Shield } fr
 interface CentralDecisionCardProps {
   decisionResult: DecisionResult;
   onOpenDecisionEngine?: () => void;
+  onOpenLedger?: () => void;
 }
 
 export const CentralDecisionCard: React.FC<CentralDecisionCardProps> = ({
   decisionResult,
-  onOpenDecisionEngine
+  onOpenDecisionEngine,
+  onOpenLedger
 }) => {
   const {
     pair,
@@ -45,7 +47,7 @@ export const CentralDecisionCard: React.FC<CentralDecisionCardProps> = ({
             <span className="text-xs uppercase font-bold tracking-wider text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded font-mono">
               AUREX Core Gate
             </span>
-            <span className="text-xs text-slate-400 font-mono">Phase 2 Real-Time Decision Gate</span>
+            <span className="text-xs text-slate-400 font-mono">Real-Time Decision Gate</span>
           </div>
           <h2 className="text-xl font-bold text-slate-900 tracking-tight mt-1 flex items-center gap-2 font-mono">
             Pair Intelligence: {pair[0]} <span className="text-slate-400 font-sans font-light">vs</span> {pair[1]}
@@ -55,8 +57,8 @@ export const CentralDecisionCard: React.FC<CentralDecisionCardProps> = ({
           </p>
         </div>
 
-        {/* Big Decision Badge & Action button */}
-        <div className="flex items-center gap-4 bg-slate-50 p-3.5 rounded-lg border border-slate-200/80">
+        {/* Big Decision Badge & Action buttons */}
+        <div className="flex flex-wrap items-center gap-3 bg-slate-50 p-3.5 rounded-lg border border-slate-200/80">
           <div className="text-right">
             <div className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold">
               System Verdict
@@ -65,16 +67,27 @@ export const CentralDecisionCard: React.FC<CentralDecisionCardProps> = ({
               <DecisionBadge decision={decision} size="lg" />
             </div>
           </div>
-          {onOpenDecisionEngine && (
-            <button
-              onClick={onOpenDecisionEngine}
-              className="px-3.5 py-2 text-xs font-semibold rounded bg-slate-900 text-white hover:bg-slate-800 transition-colors flex items-center gap-1.5 shadow-sm font-mono"
-              title="Tune friction parameters in Decision Engine"
-            >
-              <span>Tune Parameters</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </button>
-          )}
+          <div className="flex items-center gap-2">
+            {onOpenLedger && (
+              <button
+                onClick={onOpenLedger}
+                className="px-3 py-2 text-xs font-semibold rounded bg-amber-500 text-slate-950 hover:bg-amber-400 transition-colors flex items-center gap-1 shadow-sm font-mono"
+                title="Inspect 8-stage auditable ledger"
+              >
+                <span>Audit Ledger</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            )}
+            {onOpenDecisionEngine && (
+              <button
+                onClick={onOpenDecisionEngine}
+                className="px-3 py-2 text-xs font-semibold rounded bg-slate-900 text-white hover:bg-slate-800 transition-colors flex items-center gap-1 shadow-sm font-mono"
+                title="Tune friction parameters in Decision Engine"
+              >
+                <span>Tune Gates</span>
+              </button>
+            )}
+          </div>
         </div>
       </div>
 

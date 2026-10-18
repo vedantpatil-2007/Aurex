@@ -3,6 +3,7 @@ import { NormalizedObservation, ContractSymbol } from '../types/market';
 import { ContractUniverseTable } from '../components/tables/ContractUniverseTable';
 import { ExpiryTimelineVisual } from '../components/contracts/ExpiryTimelineVisual';
 import { NormalizedComparisonChart } from '../components/charts/NormalizedComparisonChart';
+import { ContractComparabilityCard } from '../components/contracts/ContractComparabilityCard';
 import { ArrowRight } from 'lucide-react';
 
 interface ContractsPageProps {
@@ -67,6 +68,13 @@ export const Contracts: React.FC<ContractsPageProps> = ({
         observations={observations}
         selectedSymbol={selectedSymbol}
         onSelectContract={onSelectContract}
+      />
+
+      {/* Contract Comparability Engine Analysis */}
+      <ContractComparabilityCard
+        obsA={latestBySymbol.GOLDM}
+        obsB={latestBySymbol[selectedSymbol] || latestBySymbol.GOLDTEN}
+        pair={['GOLDM', selectedSymbol === 'GOLDM' ? 'GOLDTEN' : selectedSymbol]}
       />
 
       {/* Normalized Contract Prices Chart highlighting selected contract */}

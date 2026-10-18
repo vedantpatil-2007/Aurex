@@ -141,14 +141,18 @@ export const Overview: React.FC<OverviewPageProps> = ({
       {/* Phase 2J: How AUREX Works - 7-Stage Pipeline */}
       <ProductArchitectureFlow />
 
-      {/* Central AUREX Decision Card (Responding dynamically to active pair and cost assumptions) */}
+      {/* Central AUREX Decision Card */}
       <CentralDecisionCard
         decisionResult={decisionResult}
         onOpenDecisionEngine={() => onNavigate('decision')}
+        onOpenLedger={() => onNavigate('ledger')}
       />
 
-      {/* Phase 2A: Compact Data Health Panel */}
-      <DataHealthPanel health={dataHealth} />
+      {/* Data Health & Provenance Panel */}
+      <DataHealthPanel 
+        health={dataHealth} 
+        onOpenDataLab={() => onNavigate('data-lab')}
+      />
 
       {/* Contract Snapshot Table */}
       <ContractSnapshotTable

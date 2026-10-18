@@ -9,10 +9,13 @@ import { DecisionPipelineVisual } from '../components/decision/DecisionPipelineV
 import { CostWaterfallChart } from '../components/decision/CostWaterfallChart';
 import { WhyExplanationPanel } from '../components/decision/WhyExplanationPanel';
 import { DecisionBadge } from '../components/cards/DecisionBadge';
+import { StressLabSensitivityGrid } from '../components/decision/StressLabSensitivityGrid';
+import { marketDataService } from '../services/marketDataService';
 import { 
   ShieldCheck, 
   ArrowRight, 
-  Zap
+  Zap,
+  FileSpreadsheet
 } from 'lucide-react';
 
 interface DecisionPageProps {
@@ -97,8 +100,16 @@ export const Decision: React.FC<DecisionPageProps> = ({
           </p>
         </div>
 
-        {/* Big live decision badge */}
+        {/* Big live decision badge & Ledger Shortcut */}
         <div className="flex items-center gap-3">
+          <button
+            onClick={() => onNavigate('ledger')}
+            className="px-3 py-2 bg-slate-900 hover:bg-slate-800 text-amber-400 font-bold rounded-lg text-xs transition-colors flex items-center gap-1.5 shadow-sm font-mono"
+            title="Inspect full 8-stage auditable breakdown"
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5" />
+            <span>Open Edge Survival Ledger</span>
+          </button>
           <DecisionBadge decision={decisionResult.decision} size="lg" />
         </div>
       </div>
@@ -142,6 +153,19 @@ export const Decision: React.FC<DecisionPageProps> = ({
 
       {/* Cost Waterfall Chart (Phase 2E) */}
       <CostWaterfallChart waterfall={decisionResult.waterfall} />
+
+      {/* Priority Six: Cost & Liquidity Stress Lab (Sensitivity Analysis) */}
+      <StressLabSensitivityGrid
+        pair={selectedPair}
+        observedSpread={calculatedSpread}
+        manualExpectedEdge={manualEdge}
+        volA={marketDataService.getLatestObservations()[selectedPair[0]]?.volume || 10000}
+        oiA={marketDataService.getLatestObservations()[selectedPair[0]]?.openInterest || 15000}
+        volB={marketDataService.getLatestObservations()[selectedPair[1]]?.volume || 8000}
+        oiB={marketDataService.getLatestObservations()[selectedPair[1]]?.openInterest || 11000}
+        baseFriction={friction}
+        onApplyAssumptions={onFrictionChange}
+      />
 
       {/* 2-Column Layout: Controls on Left, Transparent Why? Panel on Right */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

@@ -22,6 +22,8 @@ import {
   Award
 } from 'lucide-react';
 
+import { marketDataService } from '../services/marketDataService';
+
 interface ValidationPageProps {
   observations: NormalizedObservation[];
   selectedPair: [ContractSymbol, ContractSymbol];
@@ -35,6 +37,8 @@ export const Validation: React.FC<ValidationPageProps> = ({
   friction,
   onNavigate
 }) => {
+  const provenance = marketDataService.getProvenance();
+
   // Aligned spread series
   const seriesA = useMemo(() => observations.filter(o => o.symbol === selectedPair[0]), [observations, selectedPair]);
   const seriesB = useMemo(() => observations.filter(o => o.symbol === selectedPair[1]), [observations, selectedPair]);
@@ -68,7 +72,7 @@ export const Validation: React.FC<ValidationPageProps> = ({
             Walk-Forward Validation
           </h1>
           <p className="text-xs text-slate-600 mt-1 max-w-2xl">
-            Simulated rolling walk-forward test for pair <span className="font-mono font-bold text-slate-900">{selectedPair[0]} / {selectedPair[1]}</span>. Re-calibrates parameters in-sample and evaluates performance strictly on unseen out-of-sample data under cost friction.
+            Strict chronological out-of-sample testing for pair <span className="font-mono font-bold text-slate-900">{selectedPair[0]} / {selectedPair[1]}</span>. Re-calibrates parameters in-sample and evaluates performance strictly on unseen future test windows under cost friction without look-ahead bias.
           </p>
         </div>
 
@@ -81,14 +85,20 @@ export const Validation: React.FC<ValidationPageProps> = ({
         </button>
       </div>
 
-      {/* Visual Walk-Forward Methodology Flow (Phase 2G) */}
+      {/* Visual Walk-Forward Methodology Flow */}
       <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-3">
         <div className="flex items-center justify-between border-b border-slate-100 pb-2">
           <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 font-mono">
             Walk-Forward Testing Protocol
           </h3>
-          <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-800 font-mono">
-            Prototype Simulation
+          <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded font-mono ${
+            provenance === 'OFFICIAL MCX DATA'
+              ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+              : provenance === 'USER-IMPORTED MCX DATA'
+              ? 'bg-sky-100 text-sky-800 border border-sky-300'
+              : 'bg-amber-100 text-amber-800 border border-amber-300'
+          }`}>
+            {provenance}
           </span>
         </div>
 

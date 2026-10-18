@@ -1,5 +1,5 @@
 import React from 'react';
-import { Calendar, Cpu, Sparkles, Compass } from 'lucide-react';
+import { Calendar, Cpu, Sparkles, Compass, Menu } from 'lucide-react';
 import { ContractSymbol } from '../../types/market';
 
 interface HeaderProps {
@@ -7,22 +7,33 @@ interface HeaderProps {
   selectedPair: [ContractSymbol, ContractSymbol];
   isJudgeDemoActive?: boolean;
   onToggleJudgeDemo?: () => void;
+  onToggleMobileMenu?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   currentDate,
   selectedPair,
   isJudgeDemoActive = false,
-  onToggleJudgeDemo
+  onToggleJudgeDemo,
+  onToggleMobileMenu
 }) => {
   return (
-    <header className="h-16 bg-white border-b border-slate-200 px-6 flex items-center justify-between shrink-0 shadow-sm">
+    <header className="h-16 bg-white border-b border-slate-200 px-4 sm:px-6 flex items-center justify-between shrink-0 shadow-sm">
       {/* Title & Track */}
       <div className="flex items-center gap-3">
+        {onToggleMobileMenu && (
+          <button
+            onClick={onToggleMobileMenu}
+            className="md:hidden p-1.5 -ml-1 text-slate-700 hover:text-slate-950 hover:bg-slate-100 rounded-lg"
+            title="Open navigation menu"
+          >
+            <Menu className="w-5 h-5" />
+          </button>
+        )}
         <h1 className="text-base font-bold text-slate-900 tracking-tight font-mono flex items-center gap-2">
           AUREX
-          <span className="text-slate-300 font-sans font-light">|</span>
-          <span className="text-xs font-semibold text-slate-600 font-sans tracking-normal uppercase">
+          <span className="hidden sm:inline text-slate-300 font-sans font-light">|</span>
+          <span className="hidden sm:inline text-xs font-semibold text-slate-600 font-sans tracking-normal uppercase">
             Track 03 — Commodity Derivatives Intelligence
           </span>
         </h1>

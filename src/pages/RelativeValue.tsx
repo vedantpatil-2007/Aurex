@@ -8,6 +8,7 @@ import { CONTRACT_SPECIFICATIONS } from '../data/contracts';
 import { buildPairSpreadSeries, calculateZScore } from '../engines/relativeValueEngine';
 import { SpreadTimeSeriesChart } from '../components/charts/SpreadTimeSeriesChart';
 import { ZScoreBandsChart } from '../components/charts/ZScoreBandsChart';
+import { ContractComparabilityCard } from '../components/contracts/ContractComparabilityCard';
 import { MetricCard } from '../components/cards/MetricCard';
 import { formatINR } from '../utils/formatters';
 import { 
@@ -266,7 +267,79 @@ export const RelativeValue: React.FC<RelativeValuePageProps> = ({
         currentZScore={currentZScore}
       />
 
-      {/* Important Quantitative Honesty Callout as mandated by Phase 2D */}
+      {/* Contract Comparability Evaluation for the active pair */}
+      <ContractComparabilityCard
+        obsA={seriesA[seriesA.length - 1]}
+        obsB={seriesB[seriesB.length - 1]}
+        pair={selectedPair}
+      />
+
+      {/* Priority Four: Concise Quantitative Interpretation Panel */}
+      <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-4">
+        <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] uppercase font-mono font-bold tracking-wider px-2 py-0.5 rounded bg-slate-900 text-amber-400">
+              Quantitative Interpretation
+            </span>
+            <span className="text-xs text-slate-500 font-mono">
+              Signal Diagnosis: {selectedPair[0]} / {selectedPair[1]}
+            </span>
+          </div>
+          <span className="text-xs font-mono text-slate-500">
+            Current Spread: ₹{currentSpread.toFixed(2)}/10g ({currentZScore > 0 ? '+' : ''}{currentZScore.toFixed(2)}σ)
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+          {/* Card 1: WHAT MOVED? */}
+          <div className="bg-slate-50 border border-slate-200 rounded-lg p-3.5 space-y-1.5">
+            <div className="font-mono font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5 text-[11px]">
+              <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+              What Moved?
+            </div>
+            <p className="text-slate-700 leading-relaxed">
+              Normalized spread between {selectedPair[0]} (₹{priceA.toFixed(0)}/10g) and {selectedPair[1]} (₹{priceB.toFixed(0)}/10g) is currently <strong>₹{currentSpread.toFixed(2)}/10g</strong>. Over the trailing {rollingWindow} sessions, spread has traded with a mean of ₹{meanSpread.toFixed(2)}/10g and dispersion σ = ₹{spreadVolatility.toFixed(2)}/10g.
+            </p>
+          </div>
+
+          {/* Card 2: WHY MIGHT IT MATTER? */}
+          <div className="bg-slate-50 border border-slate-200 rounded-lg p-3.5 space-y-1.5">
+            <div className="font-mono font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5 text-[11px]">
+              <span className="w-2 h-2 rounded-full bg-sky-500"></span>
+              Why Might It Matter?
+            </div>
+            <p className="text-slate-700 leading-relaxed">
+              {Math.abs(currentZScore) >= 1.5 
+                ? `Current z-score of ${currentZScore.toFixed(2)}σ represents a statistically significant basis dislocation. While both contracts reflect gold bullion, differing quotation units, lot sizing, and retail premiums create temporary divergence.`
+                : `Spread is hovering within ${currentZScore.toFixed(2)}σ of historical mean. Basis reflects normal physical carrying charges and quotation parity.`}
+            </p>
+          </div>
+
+          {/* Card 3: WHAT INVALIDATES THE SIGNAL? */}
+          <div className="bg-slate-50 border border-slate-200 rounded-lg p-3.5 space-y-1.5">
+            <div className="font-mono font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5 text-[11px]">
+              <span className="w-2 h-2 rounded-full bg-rose-500"></span>
+              What Invalidates The Signal?
+            </div>
+            <p className="text-slate-700 leading-relaxed">
+              Execution friction! STT, exchange turnover fees, bid-ask spread crossing, and market impact on the thinner leg ({selectedPair[0] === 'GOLDM' ? selectedPair[1] : selectedPair[0]}) require at least ₹80–₹110/10g to break even. If spread convergence is smaller than friction, the trade is mathematically invalid.
+            </p>
+          </div>
+
+          {/* Card 4: WHAT EVIDENCE IS STILL MISSING? */}
+          <div className="bg-slate-50 border border-slate-200 rounded-lg p-3.5 space-y-1.5">
+            <div className="font-mono font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5 text-[11px]">
+              <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
+              What Evidence Is Still Missing?
+            </div>
+            <p className="text-slate-700 leading-relaxed">
+              Intraday order-book depth and tick-level bid/ask quotes are proxy-estimated from end-of-day settlement bhavcopy volume and open interest. Real-time market execution requires live L2 order book confirmation.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Important Quantitative Honesty Callout */}
       <div className="bg-amber-50/60 border border-amber-300 rounded-xl p-4.5 text-xs text-amber-950 space-y-1.5">
         <div className="flex items-center gap-2 font-bold font-mono uppercase text-amber-900 tracking-wider">
           <AlertTriangle className="w-4 h-4 text-amber-700" />

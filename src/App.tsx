@@ -16,9 +16,11 @@ import {
 
 // Pages
 import { Overview } from './pages/Overview';
+import { DataLab } from './pages/DataLab';
 import { Contracts } from './pages/Contracts';
 import { Normalization } from './pages/Normalization';
 import { RelativeValue } from './pages/RelativeValue';
+import { Ledger } from './pages/Ledger';
 import { Validation } from './pages/Validation';
 import { Decision } from './pages/Decision';
 
@@ -26,16 +28,38 @@ export function App() {
   // Navigation State with hash sync
   const [activePage, setActivePage] = useState<NavigationPage>(() => {
     const hash = window.location.hash.replace('#/', '').replace('#', '');
-    if (['overview', 'contracts', 'normalization', 'relative-value', 'validation', 'decision'].includes(hash)) {
+    const validPages: NavigationPage[] = [
+      'overview', 
+      'data-lab', 
+      'contracts', 
+      'normalization', 
+      'relative-value', 
+      'ledger', 
+      'validation', 
+      'decision'
+    ];
+    if (validPages.includes(hash as NavigationPage)) {
       return hash as NavigationPage;
     }
     return 'overview';
   });
 
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
   useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash.replace('#/', '').replace('#', '');
-      if (['overview', 'contracts', 'normalization', 'relative-value', 'validation', 'decision'].includes(hash)) {
+      const validPages: NavigationPage[] = [
+        'overview', 
+        'data-lab', 
+        'contracts', 
+        'normalization', 
+        'relative-value', 
+        'ledger', 
+        'validation', 
+        'decision'
+      ];
+      if (validPages.includes(hash as NavigationPage)) {
         setActivePage(hash as NavigationPage);
       }
     };
@@ -47,9 +71,50 @@ export function App() {
     setActivePage(page);
     window.location.hash = `/${page}`;
     window.scrollTo({ top: 0, behavior: 'smooth' });
+    setIsMobileMenuOpen(false);
   };
 
-  // Phase 2H: Judge Demo Mode state
+  // Market Data Reactive State & Subscription
+  const [dataVersion, setDataVersion] = useState(0);
+
+  useEffect(() => {
+    const unsubscribe = marketDataService.subscribe(() => {
+      setDataVersion(v => v + 1);
+    });
+    return unsubscribe;
+  }, []);
+
+  const rawObservations = useMemo<MarketObservation[]>(() => {
+    return marketDataService.getHistoricalData();
+  }, [dataVersion]);
+
+  const normalizedObservations = useMemo<NormalizedObservation[]>(() => {
+    return marketDataService.getNormalizedHistoricalData();
+  }, [dataVersion]);
+
+  const latestObservations = useMemo(() => {
+    return marketDataService.getLatestObservations();
+  }, [dataVersion]);
+
+  const availableDates = useMemo(() => {
+    return marketDataService.getAvailableDates();
+  }, [dataVersion]);
+
+  const [selectedDate, setSelectedDate] = useState<string>(() => {
+    return availableDates.slice(-1)[0] || '2026-10-08';
+  });
+
+  // Ensure selectedDate updates if active dataset changes and does not contain it
+  useEffect(() => {
+    if (availableDates.length > 0 && !availableDates.includes(selectedDate)) {
+      setSelectedDate(availableDates[availableDates.length - 1]);
+    }
+  }, [availableDates, selectedDate]);
+
+  const provenance = marketDataService.getProvenance();
+  const datasetMetadata = marketDataService.getMetadata();
+
+  // Judge Demo Mode state (11-step walkthrough)
   const [isJudgeDemoActive, setIsJudgeDemoActive] = useState(false);
   const [judgeStepIndex, setJudgeStepIndex] = useState(0);
 
@@ -100,32 +165,11 @@ export function App() {
     applyJudgeStep(index);
   };
 
-  // Market Data Ingestion
-  const [rawObservations] = useState<MarketObservation[]>(() => {
-    return marketDataService.getHistoricalData();
-  });
-
-  const normalizedObservations = useMemo<NormalizedObservation[]>(() => {
-    return marketDataService.getNormalizedHistoricalData();
-  }, []);
-
-  const latestObservations = useMemo(() => {
-    return marketDataService.getLatestObservations();
-  }, []);
-
-  const availableDates = useMemo(() => {
-    return marketDataService.getAvailableDates();
-  }, []);
-
-  const [selectedDate, setSelectedDate] = useState<string>(() => {
-    return availableDates.slice(-1)[0] || '2026-10-08';
-  });
-
   // Pair & Contract Selection (Default: GOLDM & GOLDTEN)
   const [selectedPair, setSelectedPair] = useState<[ContractSymbol, ContractSymbol]>(['GOLDM', 'GOLDTEN']);
   const [selectedContract, setSelectedContract] = useState<ContractSymbol>('GOLDM');
 
-  // Configurable Friction Parameters (Phase 2 includes liquidityHaircutPer10g)
+  // Configurable Friction Parameters
   const [friction, setFriction] = useState<FrictionAssumptions>({
     slippagePer10g: 25,
     brokerageTaxesPer10g: 35,
@@ -144,7 +188,7 @@ export function App() {
 
   const dataHealthSummary = useMemo(() => {
     return marketDataService.getDataHealthSummary();
-  }, []);
+  }, [dataVersion, rawObservations]);
 
   // Active Pair Aligned Series
   const seriesA = useMemo(() => {
@@ -185,19 +229,25 @@ export function App() {
   return (
     <div className="min-h-screen flex bg-slate-100 font-sans text-slate-800">
       {/* Sidebar Navigation */}
-      <Sidebar activePage={activePage} onNavigate={handleNavigate} />
+      <Sidebar 
+        activePage={activePage} 
+        onNavigate={handleNavigate}
+        isOpen={isMobileMenuOpen}
+        onClose={() => setIsMobileMenuOpen(false)}
+      />
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Header with JUDGE DEMO button */}
+        {/* Header with Mobile Hamburger & JUDGE DEMO button */}
         <Header 
           currentDate={selectedDate} 
           selectedPair={selectedPair} 
           isJudgeDemoActive={isJudgeDemoActive}
           onToggleJudgeDemo={handleToggleJudgeDemo}
+          onToggleMobileMenu={() => setIsMobileMenuOpen(prev => !prev)}
         />
 
-        {/* Phase 2H: Interactive Judge Demo Stepper Bar */}
+        {/* Interactive Judge Demo Stepper Bar */}
         {isJudgeDemoActive && (
           <JudgeTourStepper
             currentStepIndex={judgeStepIndex}
@@ -210,11 +260,16 @@ export function App() {
           />
         )}
 
-        {/* Persistent Simulation & Quality Banner */}
-        <PrototypeBanner dataQualityStatus={dataQualityReport.status} />
+        {/* Persistent Provenance & Quality Banner */}
+        <PrototypeBanner 
+          provenance={provenance}
+          filename={datasetMetadata.filename}
+          dataQualityStatus={dataQualityReport.status}
+          onNavigateToDataLab={() => handleNavigate('data-lab')}
+        />
 
         {/* Dynamic Route Screen */}
-        <main className="flex-1 p-6 md:p-8 max-w-7xl w-full mx-auto">
+        <main className="flex-1 p-4 sm:p-6 md:p-8 max-w-7xl w-full mx-auto">
           {activePage === 'overview' && (
             <Overview
               latestData={latestObservations}
@@ -226,6 +281,15 @@ export function App() {
               dataHealth={dataHealthSummary}
               onNavigate={handleNavigate}
               onStartJudgeDemo={handleToggleJudgeDemo}
+            />
+          )}
+
+          {activePage === 'data-lab' && (
+            <DataLab
+              metadata={datasetMetadata}
+              provenance={provenance}
+              onDatasetChanged={() => setDataVersion(v => v + 1)}
+              onNavigate={handleNavigate}
             />
           )}
 
@@ -255,6 +319,23 @@ export function App() {
               observations={normalizedObservations}
               selectedPair={selectedPair}
               onPairChange={setSelectedPair}
+              onNavigate={handleNavigate}
+            />
+          )}
+
+          {activePage === 'ledger' && (
+            <Ledger
+              latestData={latestObservations}
+              allObservations={normalizedObservations}
+              selectedPair={selectedPair}
+              onPairChange={setSelectedPair}
+              friction={friction}
+              manualEdge={manualEdge}
+              provenance={provenance}
+              availableDates={availableDates}
+              selectedDate={selectedDate}
+              onSelectDate={setSelectedDate}
+              spreadSeries={pairSpreadSeries}
               onNavigate={handleNavigate}
             />
           )}

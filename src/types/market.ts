@@ -131,21 +131,115 @@ export interface DataQualityReport {
   }[];
 }
 
+export type DataProvenance = 'OFFICIAL MCX DATA' | 'USER-IMPORTED MCX DATA' | 'PROTOTYPE SIMULATION';
+
+export interface ContractCoverageItem {
+  count: number;
+  earliestDate: string;
+  latestDate: string;
+  expiries: string[];
+}
+
+export interface DatasetMetadata {
+  provenance: DataProvenance;
+  filename?: string;
+  importTimestamp?: string;
+  totalRows: number;
+  validRows: number;
+  rejectedRows: number;
+  duplicateCount: number;
+  missingFieldCount: number;
+  dateRange: { start: string; end: string };
+  contractCoverage: Record<ContractSymbol, ContractCoverageItem>;
+  knownLimitations: string[];
+  sourceClassification: string;
+}
+
+export interface RejectedRow {
+  rowNumber: number;
+  raw: Record<string, string>;
+  reason: string;
+}
+
 export interface DataHealthSummary {
   source: string;
+  provenance: DataProvenance;
   totalRecords: number;
+  validRecords: number;
+  rejectedRecords: number;
   contractsCount: number;
   lastAvailableDate: string;
   qualityStatus: 'PASS' | 'WARN';
   contractCoverage: string;
+  importTimestamp?: string;
+  filename?: string;
+}
+
+export type ComparabilityClassification = 
+  | 'COMPARABLE' 
+  | 'COMPARABLE WITH MATURITY DIFFERENCE' 
+  | 'INSUFFICIENT DATA';
+
+export interface PairComparabilityReport {
+  pair: [ContractSymbol, ContractSymbol];
+  date: string;
+  symbolA: ContractSymbol;
+  symbolB: ContractSymbol;
+  expiryA: string;
+  expiryB: string;
+  daysToExpiryA: number;
+  daysToExpiryB: number;
+  expiryDifferenceDays: number;
+  dataDateAlignment: boolean;
+  normalizedPriceA: number;
+  normalizedPriceB: number;
+  spread: number;
+  volA: number;
+  oiA: number;
+  volB: number;
+  oiB: number;
+  classification: ComparabilityClassification;
+  warnings: string[];
+  termStructureNote: string;
+}
+
+export interface LedgerStageData {
+  stageNumber: number;
+  stageName: string;
+  headline: string;
+  status: 'PASS' | 'WARN' | 'FAIL' | 'INFO';
+  metrics: { label: string; value: string | number; note?: string }[];
+  explanation: string;
+  auditTrail: string[];
+}
+
+export interface EdgeSurvivalLedgerData {
+  id: string;
+  timestamp: string;
+  pair: [ContractSymbol, ContractSymbol];
+  tradeDate: string;
+  provenance: DataProvenance;
+  decision: DecisionState;
+  netEdge: number;
+  stages: LedgerStageData[];
+}
+
+export interface SensitivityScenario {
+  id: string;
+  name: 'LOWER FRICTION' | 'BASE CASE' | 'HIGHER FRICTION';
+  description: string;
+  assumptions: FrictionAssumptions;
+  decisionResult: DecisionResult;
+  survivesEdge: boolean;
 }
 
 export interface JudgeWalkthroughStep {
   stepNumber: number;
   title: string;
-  targetPage: 'overview' | 'contracts' | 'normalization' | 'relative-value' | 'validation' | 'decision';
+  targetPage: 'overview' | 'data-lab' | 'contracts' | 'normalization' | 'relative-value' | 'ledger' | 'validation' | 'decision';
   instruction: string;
   detail: string;
   focusContract?: ContractSymbol;
   focusPair?: [ContractSymbol, ContractSymbol];
 }
+
