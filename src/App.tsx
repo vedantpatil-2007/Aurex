@@ -227,7 +227,7 @@ export function App() {
   }, [selectedPair, latestPairSpread, manualEdge, latestObservations, friction]);
 
   return (
-    <div className="min-h-screen flex bg-slate-100 font-sans text-slate-800">
+    <div className="min-h-screen flex bg-slate-100 font-sans text-slate-800 overflow-x-hidden">
       {/* Sidebar Navigation */}
       <Sidebar 
         activePage={activePage} 
@@ -237,7 +237,7 @@ export function App() {
       />
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 overflow-x-hidden">
         {/* Header with Mobile Hamburger & JUDGE DEMO button */}
         <Header 
           currentDate={selectedDate} 
@@ -269,7 +269,7 @@ export function App() {
         />
 
         {/* Dynamic Route Screen */}
-        <main className="flex-1 p-4 sm:p-6 md:p-8 max-w-7xl w-full mx-auto">
+        <main className="flex-1 p-3 sm:p-5 md:p-6 lg:p-8 max-w-7xl w-full mx-auto min-w-0">
           {activePage === 'overview' && (
             <Overview
               latestData={latestObservations}

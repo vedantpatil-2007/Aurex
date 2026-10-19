@@ -24,7 +24,8 @@ import {
   Info,
   Calendar,
   FileText,
-  Trash2
+  Trash2,
+  ArrowRight
 } from 'lucide-react';
 
 interface DataLabProps {
@@ -199,11 +200,11 @@ export const DataLab: React.FC<DataLabProps> = ({
         <div className="flex items-center gap-2 self-start flex-wrap">
           <button
             onClick={handleLoadBundledSample}
-            className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg text-xs transition-colors flex items-center gap-1.5 shadow-sm font-mono"
-            title="Load bundled illustrative MCX Bhavcopy CSV sample (Unverified)"
+            className="px-3.5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg text-xs transition-colors flex items-center gap-1.5 shadow-sm font-mono"
+            title="Explore bundled illustrative sample data formatted to MCX Bhavcopy schema (unverified sourcing)"
           >
             <Database className="w-3.5 h-3.5" />
-            <span>Load Bundled Sample CSV</span>
+            <span>Explore Demo Data</span>
           </button>
           <button
             onClick={handleResetToSimulation}
@@ -214,6 +215,23 @@ export const DataLab: React.FC<DataLabProps> = ({
             <span>Reset to Simulation</span>
           </button>
         </div>
+      </div>
+
+      {/* Contextual Beginner Guide Link */}
+      <div className="bg-amber-50/70 border border-amber-200/80 rounded-xl p-3 sm:p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-xs">
+        <div className="flex items-start gap-2.5">
+          <Info className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+          <div className="text-slate-700 leading-relaxed">
+            <strong className="text-slate-900">New to AUREX?</strong> If you are exploring for the first time, click <strong className="text-amber-950 font-mono">Explore Demo Data</strong> to test the analytical pipeline immediately without preparing a custom file.
+          </div>
+        </div>
+        <button
+          onClick={() => onNavigate('overview')}
+          className="text-amber-800 hover:text-amber-950 font-mono font-bold text-xs flex items-center gap-1 shrink-0 self-start sm:self-auto underline"
+        >
+          <span>View 5-Step Workflow Guide</span>
+          <ArrowRight className="w-3 h-3" />
+        </button>
       </div>
 
       {/* Provenance Status Banner */}
@@ -306,7 +324,7 @@ export const DataLab: React.FC<DataLabProps> = ({
       </div>
 
       {/* CSV Upload / Drag-and-Drop Area */}
-      <div className="bg-white border-2 border-dashed border-slate-300 hover:border-amber-500 rounded-xl p-6 text-center transition-colors">
+      <div className="bg-white border-2 border-dashed border-slate-300 hover:border-amber-500 rounded-xl p-5 sm:p-6 text-center transition-colors shadow-xs">
         <input
           ref={fileInputRef}
           type="file"
@@ -315,26 +333,54 @@ export const DataLab: React.FC<DataLabProps> = ({
           className="hidden"
           id="csv-file-upload"
         />
-        <div className="max-w-md mx-auto space-y-3">
-          <div className="w-12 h-12 rounded-full bg-slate-100 mx-auto flex items-center justify-center text-slate-500">
-            <Upload className="w-6 h-6" />
+        <div className="max-w-xl mx-auto space-y-3.5">
+          <div className="w-11 h-11 rounded-full bg-amber-50 border border-amber-200 mx-auto flex items-center justify-center text-amber-700">
+            <Database className="w-5 h-5" />
           </div>
+
           <div>
+            <h3 className="text-sm font-bold font-mono text-slate-900">
+              Data Sourcing & Ingestion Lab
+            </h3>
+            <p className="text-xs text-slate-600 leading-relaxed max-w-lg mx-auto mt-1">
+              Have a market-data CSV file? Upload it here to analyze its contents. If you are exploring AUREX for the first time, start with the bundled demo data instead.
+            </p>
+          </div>
+
+          {/* Primary Demo Action & Secondary Upload Action */}
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-1">
+            <button
+              onClick={handleLoadBundledSample}
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg text-xs shadow-sm font-mono transition-colors cursor-pointer"
+            >
+              <Database className="w-4 h-4 text-slate-950" />
+              <span>Explore Demo Data</span>
+            </button>
+
             <label
               htmlFor="csv-file-upload"
-              className="cursor-pointer text-sm font-bold text-amber-700 hover:text-amber-800 underline mr-1"
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-amber-400 font-bold rounded-lg text-xs cursor-pointer shadow-sm font-mono transition-colors"
             >
-              Choose MCX Bhavcopy CSV File
+              <Upload className="w-3.5 h-3.5" />
+              <span>Upload Market Data CSV (Optional)</span>
             </label>
-            <span className="text-xs text-slate-500">or drag and drop here</span>
           </div>
-          <p className="text-xs text-slate-500">
-            Supports standard MCX daily bhavcopy CSV formats. Auto-detects columns: Date, Symbol, Expiry, Open, High, Low, Close, Volume, Open Interest.
-          </p>
-          <div className="flex items-center justify-center gap-3 pt-1">
+          <div className="text-[11px] text-slate-500">
+            or drag and drop your file here
+          </div>
+
+          {/* 4-step upload explanation */}
+          <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-[11px] text-slate-600 grid grid-cols-2 sm:grid-cols-4 gap-2 text-left font-mono">
+            <div><span className="font-bold text-slate-900">1. Select File:</span> Bhavcopy CSV</div>
+            <div><span className="font-bold text-slate-900">2. Auto-Detect:</span> Columns detected</div>
+            <div><span className="font-bold text-slate-900">3. Review:</span> Check validation log</div>
+            <div><span className="font-bold text-slate-900">4. Confirm:</span> Ingest for analysis</div>
+          </div>
+
+          <div className="pt-1">
             <button
               onClick={handleDownloadSampleCsv}
-              className="text-xs text-slate-600 hover:text-slate-900 underline flex items-center gap-1 font-mono"
+              className="text-xs text-slate-600 hover:text-slate-900 underline inline-flex items-center gap-1 font-mono"
             >
               <FileSpreadsheet className="w-3.5 h-3.5" />
               <span>Download sample Bhavcopy template (.csv)</span>
@@ -458,11 +504,12 @@ export const DataLab: React.FC<DataLabProps> = ({
           </div>
 
           {/* Known Data Limitations Panel */}
-          <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-2">
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
             <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5 font-mono">
               <ShieldCheck className="w-4 h-4 text-amber-600" />
               Data Provenance & Quantitative Limitations
             </h4>
+
             <div className="p-3 rounded-lg bg-amber-50/80 border border-amber-200 text-xs text-amber-950 space-y-1">
               <div className="font-bold flex items-center gap-1.5 text-amber-900 font-mono text-[11px] uppercase">
                 <AlertTriangle className="w-3.5 h-3.5 text-amber-700" />
@@ -472,11 +519,42 @@ export const DataLab: React.FC<DataLabProps> = ({
                 Uploading a file and recording a source attestation does not independently verify that the file originated from MCX. AUREX currently has no independent official-source verification mechanism. User-attested datasets remain independently unverified.
               </p>
             </div>
-            <ul className="text-xs text-slate-600 space-y-1 list-disc pl-5 pt-1">
-              {metadata.knownLimitations.map((lim, idx) => (
-                <li key={idx}>{lim}</li>
-              ))}
-            </ul>
+
+            {/* Separate Guidance for Each Dataset Type */}
+            <div className="space-y-1.5 pt-1 text-xs">
+              <div className="text-[11px] font-mono font-bold text-slate-700 uppercase">
+                Dataset Classification Criteria:
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                <div className="p-2 bg-white rounded border border-slate-200">
+                  <span className="font-bold text-amber-800 font-mono">PROTOTYPE SIMULATION:</span>
+                  <span className="text-slate-600 ml-1">Generated or calibrated demonstration values, not actual MCX market observations.</span>
+                </div>
+                <div className="p-2 bg-white rounded border border-slate-200">
+                  <span className="font-bold text-indigo-800 font-mono">PROTOTYPE SAMPLE — UNVERIFIED SOURCING:</span>
+                  <span className="text-slate-600 ml-1">Bundled illustrative data whose official source has not been verified.</span>
+                </div>
+                <div className="p-2 bg-white rounded border border-slate-200">
+                  <span className="font-bold text-sky-800 font-mono">USER-IMPORTED DATA — SOURCE UNVERIFIED:</span>
+                  <span className="text-slate-600 ml-1">Imported CSV whose origin has not been independently verified.</span>
+                </div>
+                <div className="p-2 bg-white rounded border border-slate-200">
+                  <span className="font-bold text-teal-800 font-mono">USER-ATTESTED SOURCE — NOT INDEPENDENTLY VERIFIED:</span>
+                  <span className="text-slate-600 ml-1">A user assertion that does not constitute independent verification.</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-1">
+              <div className="text-[11px] font-mono font-bold text-slate-700 uppercase mb-1">
+                Active Dataset Known Constraints:
+              </div>
+              <ul className="text-xs text-slate-600 space-y-1 list-disc pl-5">
+                {metadata.knownLimitations.map((lim, idx) => (
+                  <li key={idx}>{lim}</li>
+                ))}
+              </ul>
+            </div>
           </div>
         </div>
       )}

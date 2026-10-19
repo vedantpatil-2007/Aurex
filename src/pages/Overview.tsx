@@ -10,6 +10,7 @@ import { CentralDecisionCard } from '../components/cards/CentralDecisionCard';
 import { ContractSnapshotTable } from '../components/tables/ContractSnapshotTable';
 import { DataHealthPanel } from '../components/common/DataHealthPanel';
 import { ProductArchitectureFlow } from '../components/guide/ProductArchitectureFlow';
+import { StartHereGuide } from '../components/guide/StartHereGuide';
 import { 
   Layers, 
   Scale, 
@@ -86,6 +87,9 @@ export const Overview: React.FC<OverviewPageProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Beginner & Judge "Start Here" Explanation Guide */}
+      <StartHereGuide onNavigate={onNavigate} />
 
       {/* Top 4 KPI Metric Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

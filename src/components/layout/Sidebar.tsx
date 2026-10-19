@@ -121,7 +121,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {onClose && (
             <button
               onClick={onClose}
-              className="md:hidden text-slate-400 hover:text-white p-1"
+              className="lg:hidden text-slate-400 hover:text-white p-1 rounded-md hover:bg-slate-800"
+              aria-label="Close menu"
             >
               <X className="w-5 h-5" />
             </button>
@@ -186,9 +187,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <Users className="w-3.5 h-3.5 text-amber-500 shrink-0" />
             <span>Vedant Patil <span className="text-[10px] text-slate-400">(Quant Systems)</span></span>
           </div>
-          <div className="text-slate-400 pl-5 text-[10px]">
-            Dhanashree Vaze • Vedashree Mhatre
-          </div>
         </div>
 
         <div className="pt-2 border-t border-slate-800/60 flex items-center justify-between text-[10px] text-slate-400 font-mono">
@@ -204,14 +202,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <>
-      {/* Desktop / Tablet Static Sidebar */}
-      <aside className="hidden md:flex w-64 bg-slate-900 text-slate-100 flex-col justify-between border-r border-slate-800 shrink-0 min-h-screen">
+      {/* Desktop Static Sidebar (>= 1024px) */}
+      <aside className="hidden lg:flex w-64 bg-slate-900 text-slate-100 flex-col justify-between border-r border-slate-800 shrink-0 min-h-screen">
         {sidebarContent}
       </aside>
 
-      {/* Mobile Drawer Overlay */}
+      {/* Mobile & Tablet Drawer Overlay (< 1024px) */}
       {isOpen && (
-        <div className="fixed inset-0 z-50 md:hidden flex">
+        <div className="fixed inset-0 z-50 lg:hidden flex">
           <div 
             onClick={onClose} 
             className="fixed inset-0 bg-slate-950/80 backdrop-blur-xs transition-opacity" 
