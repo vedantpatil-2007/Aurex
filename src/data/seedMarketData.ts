@@ -8,7 +8,7 @@ import { MarketObservation } from '../types/market';
  * 
  * Contracts:
  * - GOLDM: 100g contract, 10g quote, 995 purity
- * - GOLDTEN: 10g contract, 1g quote, 995 purity
+ * - GOLDTEN: 10g contract, 10g quote, 999 purity
  * - GOLDGUINEA: 8g contract, 8g quote, 999 purity
  * - GOLDPETAL: 1g contract, 1g quote, 999 purity
  */
@@ -76,14 +76,14 @@ function generateDeterministicSeedData(): MarketObservation[] {
       openInterest: goldmOI
     });
 
-    // 2. GOLDTEN (Quote 1g, Purity 995, Expiry 2026-10-30)
-    // Raw = (Benchmark + dislocation) * (1 / 10) * (995 / 999)
+    // 2. GOLDTEN (Quote 10g, Purity 999, Expiry 2026-10-30)
+    // Raw = Benchmark (10g @ 999) - dislocation
     const goldtenNormTarget = baseGold10g999 - m_ten_dislocation;
-    const goldtenRaw = Number(((goldtenNormTarget * (1 / 10) * (995 / 999))).toFixed(2));
+    const goldtenRaw = Number(((goldtenNormTarget * (10 / 10) * (999 / 999))).toFixed(2));
     const goldtenClose = goldtenRaw;
-    const goldtenOpen = Number((goldtenClose - 4 + ((index * 3) % 8)).toFixed(2));
-    const goldtenHigh = Number((Math.max(goldtenOpen, goldtenClose) + 6 + ((index * 2) % 5)).toFixed(2));
-    const goldtenLow = Number((Math.min(goldtenOpen, goldtenClose) - 6 - ((index * 4) % 4)).toFixed(2));
+    const goldtenOpen = Number((goldtenClose - 35 + ((index * 13) % 70)).toFixed(2));
+    const goldtenHigh = Number((Math.max(goldtenOpen, goldtenClose) + 60 + ((index * 5) % 45)).toFixed(2));
+    const goldtenLow = Number((Math.min(goldtenOpen, goldtenClose) - 55 - ((index * 7) % 35)).toFixed(2));
     const goldtenVol = 3200 + Math.floor(Math.sin(index * 0.4) * 900) + ((index * 53) % 700);
     const goldtenOI = 4800 + index * 25 + ((index * 31) % 500);
 

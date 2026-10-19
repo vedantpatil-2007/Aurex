@@ -24,12 +24,19 @@ describe('AUREX Engine Unit Tests (Phase 1 & Phase 2)', () => {
 
   // Test 2: GOLDTEN normalization
   it('2. should accurately normalize GOLDTEN contract prices', () => {
-    const rawPrice = 7450;
-    const result = normalizePrice(rawPrice, 1, 995);
-    const expected = Number((7450 * 10 * (999 / 995)).toFixed(2)); // ~74799.50
-    expect(result.normalizedPrice).toBe(expected);
-    expect(result.unitAdjustment).toBe(10);
-    expect(result.purityAdjustment).toBeCloseTo(1.00402, 4);
+    const rawPrice = 74500;
+    const result = normalizePrice(rawPrice, 10, 999);
+    expect(result.normalizedPrice).toBe(74500.00);
+    expect(result.unitAdjustment).toBe(1);
+    expect(result.purityAdjustment).toBe(1);
+
+    const breakdown = getNormalizationBreakdown(rawPrice, CONTRACT_SPECIFICATIONS.GOLDTEN);
+    expect(breakdown.quoteUnit).toBe(10);
+    expect(breakdown.purity).toBe(999);
+    expect(breakdown.unitMultiplier).toBe(1.0);
+    expect(breakdown.purityMultiplier).toBe(1.0);
+    expect(breakdown.scalingFactor).toBe(1.0);
+    expect(breakdown.normalizedPrice).toBe(74500.00);
   });
 
   // Test 3: GOLDGUINEA normalization
@@ -250,7 +257,7 @@ describe('AUREX Engine Unit Tests (Phase 1 & Phase 2)', () => {
       date: '2026-10-20',
       symbol: 'GOLDTEN',
       expiryDate: '2026-10-30', // 10 days
-      open: 7400, high: 7450, low: 7390, close: 7420, volume: 2000, openInterest: 3000
+      open: 74000, high: 74500, low: 73900, close: 74200, volume: 2000, openInterest: 3000
     };
     const normNear = normalizeObservation(nearObs);
     expect(normNear.lifecycleStage).toBe('NEAR_EXPIRY');
@@ -267,12 +274,12 @@ describe('AUREX Engine Unit Tests (Phase 1 & Phase 2)', () => {
 
   // Test 15: Cross-Contract Relative Value on alternative pair (GOLDTEN vs GOLDPETAL)
   it('15. should evaluate relative-value correctly for alternative pairs like GOLDTEN/GOLDPETAL', () => {
-    const priceA = normalizePrice(7450, 1, 995).normalizedPrice; // GOLDTEN ~74799.50
+    const priceA = normalizePrice(74800, 10, 999).normalizedPrice; // GOLDTEN 74800.00
     const priceB = normalizePrice(7480, 1, 999).normalizedPrice; // GOLDPETAL 74800.00
     const spread = calculateSpread(priceA, priceB);
 
     expect(isFinite(spread)).toBe(true);
-    expect(Math.abs(spread)).toBeCloseTo(0.5, 1);
+    expect(spread).toBe(0.00);
   });
 
   // Test 16: Three Official Demo Scenario Presets validation
@@ -303,5 +310,18 @@ describe('AUREX Engine Unit Tests (Phase 1 & Phase 2)', () => {
       friction: { slippagePer10g: 35, brokerageTaxesPer10g: 35, liquidityHaircutPer10g: 20, costBufferPer10g: 25, liquidityThresholdScore: 50 }
     });
     expect(p3.decision).toBe('NO TRADE');
+  });
+
+  // Test 17: Regression check - Defective GOLDTEN metadata rejection
+  it('17. should confirm that defective GOLDTEN metadata (1g quote or 995 purity) fails canonical equality', () => {
+    const spec = CONTRACT_SPECIFICATIONS.GOLDTEN;
+    expect(spec.quoteUnitGrams).toBe(10);
+    expect(spec.purityPermille).toBe(999);
+    expect(spec.tickSize).toBe(1.0);
+
+    // Defective parameters (1g, 995) would produce ~747995.00 on ₹74,500 raw price (10x too large)
+    const defectiveResult = normalizePrice(74500, 1, 995);
+    expect(defectiveResult.normalizedPrice).not.toBe(74500.00);
+    expect(defectiveResult.normalizedPrice).toBeCloseTo(74500 * 10 * (999 / 995), 0);
   });
 });

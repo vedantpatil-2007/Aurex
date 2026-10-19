@@ -15,17 +15,19 @@ import { NormalizedObservation } from '../types/market';
 describe('AUREX Round 2 Comprehensive Evidence Verification Suite', () => {
   // Area 1: Separate handling of contract size and quote unit
   it('1. should strictly differentiate contract size (lot) from quote unit in grams', () => {
-    // GOLDM: Contract Size = 100g, Quote Unit = 10g
+    // GOLDM: Contract Size = 100g, Quote Unit = 10g (they differ)
     const goldm = CONTRACT_SPECIFICATIONS.GOLDM;
     expect(goldm.contractSizeGrams).toBe(100);
     expect(goldm.quoteUnitGrams).toBe(10);
+    expect(goldm.purityPermille).toBe(995);
     expect(goldm.contractSizeGrams).not.toBe(goldm.quoteUnitGrams);
 
-    // GOLDTEN: Contract Size = 10g, Quote Unit = 1g
+    // GOLDTEN: Contract Size = 10g, Quote Unit = 10g, Purity = 999 (verified MCX spec)
     const goldten = CONTRACT_SPECIFICATIONS.GOLDTEN;
     expect(goldten.contractSizeGrams).toBe(10);
-    expect(goldten.quoteUnitGrams).toBe(1);
-    expect(goldten.contractSizeGrams).not.toBe(goldten.quoteUnitGrams);
+    expect(goldten.quoteUnitGrams).toBe(10);
+    expect(goldten.purityPermille).toBe(999);
+    expect(goldten.tickSize).toBe(1.0);
 
     // Normalization must use quoteUnitGrams, NOT contractSizeGrams
     const normBreakdown = getNormalizationBreakdown(74500, goldm);
@@ -87,7 +89,7 @@ describe('AUREX Round 2 Comprehensive Evidence Verification Suite', () => {
 01-Sep-2026,GOLDM,05-Nov-2026,74000,74500,73900,74200,10000,15000
 01-Sep-2026,GOLDM,05-Nov-2026,74000,74500,73900,74200,10000,15000
 01-Sep-2026,SILVERM,30-Nov-2026,89000,89500,88900,89200,5000,8000
-01-Sep-2026,GOLDTEN,27-Nov-2026,7400,7450,7390,7420,5000,7000
+01-Sep-2026,GOLDTEN,27-Nov-2026,74000,74500,73900,74200,5000,7000
 02-Sep-2026,GOLDM,invalid-date,74100,74600,74000,74300,9000,14000`;
 
     const result = parseBhavcopyCsv(testCsv, 'test.csv', 'USER-IMPORTED DATA — SOURCE UNVERIFIED');
@@ -134,10 +136,10 @@ describe('AUREX Round 2 Comprehensive Evidence Verification Suite', () => {
       symbol: 'GOLDTEN',
       expiryDate: '2026-11-27', // 57 days left (22 days difference)
       daysToExpiry: 57,
-      open: 7420, high: 7470, low: 7400, close: 7440, volume: 8000, openInterest: 12000,
-      normalizedPrice: 74700,
-      unitAdjustment: 10,
-      purityAdjustment: 1.00402,
+      open: 74200, high: 74700, low: 74000, close: 74400, volume: 8000, openInterest: 12000,
+      normalizedPrice: 74400,
+      unitAdjustment: 1,
+      purityAdjustment: 1,
       lifecycleStage: 'NORMAL'
     };
 
@@ -168,10 +170,10 @@ describe('AUREX Round 2 Comprehensive Evidence Verification Suite', () => {
       symbol: 'GOLDTEN',
       expiryDate: '2026-11-27',
       daysToExpiry: 50,
-      open: 7510, high: 7540, low: 7490, close: 7520, volume: 9000, openInterest: 14000,
-      normalizedPrice: 75503,
-      unitAdjustment: 10,
-      purityAdjustment: 1.00402,
+      open: 75100, high: 75400, low: 74900, close: 75200, volume: 9000, openInterest: 14000,
+      normalizedPrice: 75200,
+      unitAdjustment: 1,
+      purityAdjustment: 1,
       lifecycleStage: 'NORMAL'
     };
 

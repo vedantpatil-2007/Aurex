@@ -16,10 +16,10 @@ export const CONTRACT_SPECIFICATIONS: Record<ContractSymbol, ContractSpecificati
     symbol: 'GOLDTEN',
     name: 'Gold 10 Grams Futures',
     contractSizeGrams: 10,
-    quoteUnitGrams: 1,
-    purityPermille: 995,
+    quoteUnitGrams: 10,
+    purityPermille: 999,
     expiryScheduleDesc: '27th–31st of contract month',
-    tickSize: 0.5,
+    tickSize: 1.0,
     tradingLotDescription: '10 grams',
     deliveryUnit: '10 grams (compulsory delivery)'
   },

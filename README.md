@@ -21,8 +21,8 @@ On the **Multi Commodity Exchange of India (MCX)**, four distinct futures contra
 
 ### The Core Problem
 Although these contracts track the same underlying commodity, **same metal does not mean same contract economics**:
-1. **Heterogeneous Lot Sizes & Quotation Units**: GOLDM trades in 100g lots quoted per 10g; GOLDTEN trades in 10g lots quoted per 1g; GOLDGUINEA trades in 8g lots quoted per 8g; GOLDPETAL trades in 1g lots quoted per 1g.
-2. **Purity Mismatches**: GOLDM and GOLDTEN settle on 995 fineness standard (Ahmedabad/Mumbai delivery basis), while GOLDGUINEA and GOLDPETAL settle on 999 fine gold purity.
+1. **Heterogeneous Lot Sizes & Quotation Units**: GOLDM trades in 100g lots quoted per 10g; GOLDTEN trades in 10g lots quoted per 10g; GOLDGUINEA trades in 8g lots quoted per 8g; GOLDPETAL trades in 1g lots quoted per 1g.
+2. **Purity Mismatches**: GOLDM settles on 995 fineness standard (Ahmedabad/Mumbai delivery basis), while GOLDTEN, GOLDGUINEA, and GOLDPETAL settle on 999 fine gold purity.
 3. **Maturity Asynchrony**: Contracts expire on different calendar schedules (e.g., 3rd–5th of the month vs 27th–31st of the month), introducing carry cost, financing differentials, and roll premiums.
 4. **Execution Friction & Liquidity Asymmetry**: A retail contract like GOLDPETAL or GOLDGUINEA has significantly shallower order-book depth and higher bid-ask crossing costs than institutional GOLDM.
 
@@ -86,7 +86,7 @@ $$\text{Price}_{\text{norm}} = \text{Raw Close} \times \left(\frac{10}{\text{Quo
 | Contract Symbol | Trading Lot | Quote Unit | Purity | Unit Multiplier | Purity Multiplier | Effective Scaling |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | **GOLDM** | 100g | 10g | 995‰ | $\times 1.0000$ | $\times 1.004020$ | $\times 1.004020$ |
-| **GOLDTEN** | 10g | 1g | 995‰ | $\times 10.0000$ | $\times 1.004020$ | $\times 10.04020$ |
+| **GOLDTEN** | 10g | 10g | 999‰ | $\times 1.0000$ | $\times 1.000000$ | $\times 1.000000$ |
 | **GOLDGUINEA** | 8g | 8g | 999‰ | $\times 1.2500$ | $\times 1.000000$ | $\times 1.250000$ |
 | **GOLDPETAL** | 1g | 1g | 999‰ | $\times 10.0000$ | $\times 1.000000$ | $\times 10.00000$ |
 
@@ -140,7 +140,7 @@ AUREX maintains strict data provenance classifications across all views:
 - **Styling**: Tailwind CSS
 - **Charts**: Recharts (consistent quantitative time series, z-score bands, and waterfall charts)
 - **Icons**: Lucide React
-- **Testing**: Vitest (29 unit tests covering all mathematical engines, CSV ingestion, and look-ahead prevention)
+- **Testing**: Vitest (30 unit tests covering all mathematical engines, CSV ingestion, and look-ahead prevention)
 
 ---
 
@@ -184,8 +184,8 @@ npm run preview
 
 ## 6. Testing & Verification
 
-The project includes 29 unit tests in `src/test/` covering all critical mathematical paths:
-- `src/test/engines.test.ts` (16 tests: Normalization, spread calculation, z-score, cost waterfall, lifecycle stages, decision states)
+The project includes 30 unit tests in `src/test/` covering all critical mathematical paths:
+- `src/test/engines.test.ts` (17 tests: Normalization, spread calculation, z-score, cost waterfall, lifecycle stages, decision states, canonical metadata regression prevention)
 - `src/test/round2.test.ts` (13 tests: Lot size vs quote unit separation, purity scaling, CSV tokenization & auto column mapping, duplicate detection, rejection inspector, contract comparability, 8-stage ledger audit trail, walk-forward look-ahead prevention, zero-variance safeguards)
 
 To execute the test suite:
@@ -199,7 +199,7 @@ npm test
 
 1. **Step 1 — Overview (`/overview`)**: Review the PS03 problem statement and active monitored contracts.
 2. **Step 2 — Data Lab (`/data-lab`)**: Click **"Load Bundled Sample CSV"** to demonstrate real-time parsing, column auto-detection, duplicate checking, rejection inspection, and discrete contract coverage under unverified sample sourcing.
-3. **Step 3 — Contract Universe (`/contracts`)**: Inspect the structural difference between GOLDM (100g lot, 10g quote) and GOLDTEN (10g lot, 1g quote), and view the discrete expiry lifecycle timeline.
+3. **Step 3 — Contract Universe (`/contracts`)**: Inspect the structural difference between GOLDM (100g lot, 10g quote, 995‰) and GOLDTEN (10g lot, 10g quote, 999‰), and view the discrete expiry lifecycle timeline.
 4. **Step 4 — Normalization Engine (`/normalization`)**: Observe how raw prices are adjusted by quotation multiplier and fineness adjustment into ₹ / 10g @ 999 parity.
 5. **Step 5 — Relative Value Lab (`/relative-value`)**: Select pair `GOLDM / GOLDTEN`, explore the 20D rolling Z-Score bands, and inspect the 4-part **Quantitative Interpretation Panel** (*What Moved, Why Might It Matter, What Invalidates, Missing Evidence*).
 6. **Step 6 — Edge Survival Ledger (`/ledger`)**: Walk through the 8-stage auditable ledger decomposition and click **"Export Audit Trail"** to download the JSON verification file.

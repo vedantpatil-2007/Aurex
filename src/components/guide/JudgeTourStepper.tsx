@@ -44,7 +44,7 @@ export const JUDGE_STEPS: JudgeWalkthroughStep[] = [
     title: '3. Contract Specifications',
     targetPage: 'contracts',
     instruction: 'Inspect GOLDM and GOLDTEN heterogeneous contract specs.',
-    detail: 'GOLDM has a 100g lot size with a 10g quotation unit. GOLDTEN has a 10g lot size with a 1g quotation unit. Comparing raw ₹74,500 vs ₹7,450 directly would be an economic error.',
+    detail: 'GOLDM has a 100g lot size with a 10g quotation unit at 995 purity. GOLDTEN has a 10g lot size with a 10g quotation unit at 999 purity. Comparing raw quotes without accounting for lot economics, purity adjustments (995 vs 999), and maturity schedules is an economic error.',
     focusContract: 'GOLDM',
     focusPair: ['GOLDM', 'GOLDTEN']
   },
