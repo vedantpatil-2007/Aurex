@@ -26,7 +26,7 @@ export const JUDGE_STEPS: JudgeWalkthroughStep[] = [
     stepNumber: 1,
     title: '1. Overview Dashboard',
     targetPage: 'overview',
-    instruction: 'Review executive system summary and PS03 problem framing.',
+    instruction: 'Review executive system summary and problem framing.',
     detail: 'AUREX solves the cross-contract basis problem: four contracts representing the same physical gold trade under different quotation units, purities, and liquidity profiles.',
     focusContract: 'GOLDM',
     focusPair: ['GOLDM', 'GOLDTEN']
@@ -135,7 +135,7 @@ export const JudgeTourStepper: React.FC<JudgeTourStepperProps> = ({
           <div className="flex items-center gap-3">
             <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-amber-500 text-slate-950 font-mono font-bold text-xs uppercase tracking-wider shadow-sm">
               <Compass className="w-3.5 h-3.5" />
-              Judge Walkthrough
+              Pipeline Walkthrough
             </span>
             <span className="font-mono text-xs text-amber-400 font-bold">
               Step {currentStepIndex + 1} of {totalSteps}

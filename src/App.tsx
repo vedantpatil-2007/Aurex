@@ -238,12 +238,10 @@ export function App() {
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 overflow-x-hidden">
-        {/* Header with Mobile Hamburger & JUDGE DEMO button */}
+        {/* Header with Mobile Hamburger */}
         <Header 
           currentDate={selectedDate} 
           selectedPair={selectedPair} 
-          isJudgeDemoActive={isJudgeDemoActive}
-          onToggleJudgeDemo={handleToggleJudgeDemo}
           onToggleMobileMenu={() => setIsMobileMenuOpen(prev => !prev)}
         />
 

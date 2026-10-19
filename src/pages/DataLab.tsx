@@ -625,7 +625,7 @@ export const DataLab: React.FC<DataLabProps> = ({
               Rejection Inspector ({parsePreview.rejectedRows.length} Rows Filtered Out)
             </h4>
             <p>
-              The AUREX validation pipeline rejects records with invalid dates, non-PS03 commodity symbols, negative prices, or missing expiries to prevent look-ahead or corrupted calculations.
+              The AUREX validation pipeline rejects records with invalid dates, unsupported commodity symbols, negative prices, or missing expiries to prevent look-ahead or corrupted calculations.
             </p>
           </div>
 

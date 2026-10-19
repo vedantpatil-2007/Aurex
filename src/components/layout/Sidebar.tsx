@@ -105,11 +105,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <TrendingUp className="w-5 h-5 text-slate-950 stroke-[2.5]" />
             </div>
             <div>
-              <div className="text-xl font-bold tracking-tight text-white flex items-center gap-1.5 font-mono">
+              <div className="text-xl font-bold tracking-tight text-white font-mono">
                 AUREX
-                <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30">
-                  v2.0
-                </span>
               </div>
               <div className="text-[11px] font-medium tracking-wide text-slate-400">
                 MCX Gold Intelligence
@@ -192,9 +189,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="pt-2 border-t border-slate-800/60 flex items-center justify-between text-[10px] text-slate-400 font-mono">
           <span className="flex items-center gap-1">
             <Shield className="w-3 h-3 text-slate-400" />
-            Hack in Hills ’26
+            Commodity Analytics
           </span>
-          <span className="text-amber-400 font-bold">PS 03</span>
+          <span className="text-slate-400 font-medium">MCX Benchmark</span>
         </div>
       </div>
     </div>

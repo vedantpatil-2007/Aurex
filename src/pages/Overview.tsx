@@ -48,11 +48,8 @@ export const Overview: React.FC<OverviewPageProps> = ({
       {/* Title & Subtitle banner */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2">
         <div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-slate-900 text-amber-400 font-mono">
-              Track 03
-            </span>
-            <span className="text-xs text-slate-500 font-medium">Commodity Derivatives Intelligence</span>
+          <div className="text-xs text-slate-500 font-medium uppercase tracking-wider font-mono">
+            Commodity Derivatives Intelligence
           </div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight mt-1 font-mono">
             AUREX <span className="font-sans font-normal text-slate-500 text-lg">| Cost-Aware Cross-Contract Intelligence</span>
@@ -100,7 +97,7 @@ export const Overview: React.FC<OverviewPageProps> = ({
           subtitle="GOLDM, GOLDTEN, GOLDGUINEA, GOLDPETAL"
           badge={
             <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-800 border border-slate-200">
-              MCX PS03
+              MCX Gold
             </span>
           }
         />
@@ -165,15 +162,15 @@ export const Overview: React.FC<OverviewPageProps> = ({
         onSelectContract={onSelectContract}
       />
 
-      {/* Guided demonstration flow banner for hackathon judges */}
+      {/* Guided demonstration flow banner */}
       <div className="bg-slate-900 text-white rounded-xl p-5 border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="space-y-1">
           <div className="text-xs uppercase font-bold tracking-wider text-amber-400 font-mono flex items-center gap-2">
             <Compass className="w-4 h-4 text-amber-400" />
-            Hackathon Judge Demonstration Flow
+            Interactive Pipeline Walkthrough
           </div>
           <div className="text-xs text-slate-300 max-w-2xl leading-relaxed">
-            Take a 2-minute interactive tour across the complete analytical pipeline: Contracts Universe → Precision Normalization → Statistical Spread → Cost Waterfall → Walk-Forward Validation → Final Verdict.
+            Follow the analytical pipeline step-by-step: Contracts Universe → Precision Normalization → Statistical Spread → Cost Waterfall → Walk-Forward Validation → Final Verdict.
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
@@ -183,14 +180,14 @@ export const Overview: React.FC<OverviewPageProps> = ({
               className="px-3.5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg text-xs transition-colors flex items-center gap-1.5 shadow-sm font-mono"
             >
               <Compass className="w-3.5 h-3.5" />
-              <span>Launch Guided Tour</span>
+              <span>Launch Walkthrough</span>
             </button>
           )}
           <button
             onClick={() => onNavigate('contracts')}
             className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-lg text-xs transition-colors flex items-center gap-1.5 border border-slate-700 font-mono"
           >
-            <span>Manual: Contracts</span>
+            <span>Explore Contracts</span>
             <ArrowRight className="w-3.5 h-3.5" />
           </button>
         </div>

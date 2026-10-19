@@ -57,7 +57,7 @@ export const PrototypeBanner: React.FC<PrototypeBannerProps> = ({
           ) : isSample ? (
             <span>Bundled illustrative sample in MCX Bhavcopy schema. Calibrated values; unverified exchange sourcing.</span>
           ) : (
-            <span>Calibrated prototype simulation based on official MCX PS03 contract parameters.</span>
+            <span>Calibrated prototype simulation based on official MCX contract parameters.</span>
           )}
         </span>
       </div>

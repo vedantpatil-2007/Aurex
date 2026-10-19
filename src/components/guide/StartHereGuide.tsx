@@ -45,7 +45,7 @@ export const StartHereGuide: React.FC<StartHereGuideProps> = ({
                 Start Here: What AUREX Does
               </h2>
               <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-amber-100 text-amber-800 font-sans">
-                Beginner & Judge Guide
+                Platform Guide
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
@@ -316,7 +316,7 @@ export const StartHereGuide: React.FC<StartHereGuideProps> = ({
             <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
             <p className="leading-relaxed">
               <strong className="text-slate-900">Prototype Disclaimer: </strong>
-              AUREX is a quantitative decision-support prototype built for Hack in Hills ’26. It is not a guaranteed-profit system, does not execute real-money trades, and does not provide financial investment advice.
+              AUREX is a quantitative decision-support prototype. It is not a guaranteed-profit system, does not execute real-money trades, and does not provide financial investment advice.
             </p>
           </div>
         </div>

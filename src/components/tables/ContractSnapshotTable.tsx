@@ -25,7 +25,7 @@ export const ContractSnapshotTable: React.FC<ContractSnapshotTableProps> = ({
             MCX Gold Contract Snapshot
           </h3>
           <p className="text-xs text-slate-500">
-            Official PS03 contracts: heterogeneous lot sizes and purities observed on common date
+            Active MCX gold contracts: heterogeneous lot sizes and purities observed on common date
           </p>
         </div>
         <div className="text-xs text-slate-500 font-mono">
