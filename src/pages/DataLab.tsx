@@ -1,31 +1,31 @@
 import React, { useState, useRef } from 'react';
-import { 
-  DatasetMetadata, 
-  DataProvenance, 
-  MarketObservation, 
-  RejectedRow, 
-  ContractSymbol 
+import {
+  DatasetMetadata,
+  DataProvenance,
+  ContractSymbol
 } from '../types/market';
 import { marketDataService } from '../services/marketDataService';
-import { parseBhavcopyCsv, ParseResult, ColumnMapping, detectColumnMapping, tokenizeCsvLine } from '../services/csvParserService';
+import { parseBhavcopyCsv, ParseResult, ColumnMapping } from '../services/csvParserService';
 import { SAMPLE_MCX_BHAVCOPY_CSV } from '../data/sampleOfficialBhavcopy';
-import { 
-  Database, 
-  Upload, 
-  FileSpreadsheet, 
-  CheckCircle2, 
-  AlertTriangle, 
-  XCircle, 
-  RefreshCw, 
-  Download, 
-  Layers, 
-  Table, 
-  ShieldCheck, 
+import {
+  Database,
+  Upload,
+  FileSpreadsheet,
+  CheckCircle2,
+  AlertTriangle,
+  XCircle,
+  RefreshCw,
+  Download,
+  Table,
+  ShieldCheck,
   Info,
-  Calendar,
   FileText,
   Trash2,
-  ArrowRight
+  ArrowRight,
+  ExternalLink,
+  HardDrive,
+  Hash,
+  ShieldAlert
 } from 'lucide-react';
 
 interface DataLabProps {
@@ -107,7 +107,7 @@ export const DataLab: React.FC<DataLabProps> = ({
     onDatasetChanged();
   };
 
-  // Confirm and commit uploaded dataset into active memory
+  // Confirm and commit uploaded dataset into active memory & local storage
   const handleConfirmImport = () => {
     if (!csvRawText) return;
     try {
@@ -128,6 +128,16 @@ export const DataLab: React.FC<DataLabProps> = ({
   // Reset to deterministic Prototype Simulation
   const handleResetToSimulation = () => {
     marketDataService.resetToSimulation();
+    setParsePreview(null);
+    setSelectedFile(null);
+    setCsvRawText('');
+    onDatasetChanged();
+    setActiveTab('current');
+  };
+
+  // Clear persistent local storage dataset and revert to simulation
+  const handleClearLocalStorage = () => {
+    marketDataService.clearPersistedData();
     setParsePreview(null);
     setSelectedFile(null);
     setCsvRawText('');
@@ -192,7 +202,7 @@ export const DataLab: React.FC<DataLabProps> = ({
             Data Lab & Provenance
           </h1>
           <p className="text-xs text-slate-600 mt-1 max-w-2xl">
-            Ingest Bhavcopy CSV files, preview and map columns, inspect validation and rejections, and track transparent provenance across all analytical engines.
+            Ingest Bhavcopy CSV files, preview and map columns, inspect validation and rejections, compute cryptographic SHA-256 fingerprints, and track transparent provenance across all analytical engines.
           </p>
         </div>
 
@@ -208,7 +218,7 @@ export const DataLab: React.FC<DataLabProps> = ({
           </button>
           <button
             onClick={handleResetToSimulation}
-            className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg text-xs transition-colors flex items-center gap-1.5 border border-slate-300"
+            className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg text-xs transition-colors flex items-center gap-1.5 border border-slate-300 font-mono"
             title="Restore default calibrated prototype simulation"
           >
             <RefreshCw className="w-3.5 h-3.5" />
@@ -234,7 +244,7 @@ export const DataLab: React.FC<DataLabProps> = ({
         </button>
       </div>
 
-      {/* Provenance Status Banner */}
+      {/* Provenance Status Banner with SHA-256 and Persistence */}
       <div className={`p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
         provenance === 'OFFICIAL MCX DATA — SOURCE VERIFIED'
           ? 'bg-emerald-50 border-emerald-300 text-emerald-950'
@@ -246,8 +256,8 @@ export const DataLab: React.FC<DataLabProps> = ({
           ? 'bg-indigo-50 border-indigo-300 text-indigo-950'
           : 'bg-amber-50 border-amber-300 text-amber-950'
       }`}>
-        <div className="flex items-center gap-3">
-          <div className={`w-9 h-9 rounded-lg flex items-center justify-center font-bold text-sm shrink-0 ${
+        <div className="flex items-start sm:items-center gap-3">
+          <div className={`w-9 h-9 rounded-lg flex items-center justify-center font-bold text-sm shrink-0 mt-0.5 sm:mt-0 ${
             provenance === 'OFFICIAL MCX DATA — SOURCE VERIFIED'
               ? 'bg-emerald-600 text-white'
               : provenance === 'USER-ATTESTED SOURCE — NOT INDEPENDENTLY VERIFIED'
@@ -260,9 +270,9 @@ export const DataLab: React.FC<DataLabProps> = ({
           }`}>
             <Database className="w-5 h-5" />
           </div>
-          <div>
+          <div className="space-y-1">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs uppercase font-mono font-bold tracking-wider px-2 py-0.5 rounded bg-white/90 border shadow-sm">
+              <span className="text-xs uppercase font-mono font-bold tracking-wider px-2 py-0.5 rounded bg-white/90 border shadow-xs">
                 Active Source: {provenance}
               </span>
               <span className="text-xs text-slate-600 font-mono">
@@ -279,9 +289,30 @@ export const DataLab: React.FC<DataLabProps> = ({
                 </span>
               )}
             </div>
-            <div className="text-xs text-slate-700 mt-0.5">
-              {metadata.sourceClassification} • Date Range: {metadata.dateRange.start} to {metadata.dateRange.end} ({metadata.totalRows} observations)
+
+            <div className="text-xs text-slate-700">
+              {metadata.sourceClassification} â€¢ Date Range: {metadata.dateRange.start} to {metadata.dateRange.end} ({metadata.totalRows} observations)
             </div>
+
+            {/* Cryptographic SHA-256 and Storage Persistence Chips */}
+            <div className="flex items-center gap-2 pt-1 flex-wrap">
+              <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-white/90 border border-slate-200 text-[10px] font-mono text-slate-700 shadow-xs">
+                <Hash className="w-3 h-3 text-slate-500" />
+                <span>SHA-256:</span>
+                <span className="font-bold text-slate-900 truncate max-w-[140px] sm:max-w-[220px]" title={metadata.fileHashSha256}>
+                  {metadata.fileHashSha256 ? metadata.fileHashSha256.slice(0, 18) + '...' : 'sim_deterministic_seed'}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-white/90 border border-slate-200 text-[10px] font-mono text-slate-700 shadow-xs">
+                <HardDrive className="w-3 h-3 text-slate-500" />
+                <span>Storage:</span>
+                <span className="font-bold text-slate-900">
+                  {metadata.storagePersistence || 'SESSION_MEMORY'}
+                </span>
+              </div>
+            </div>
+
             {metadata.attestationNotes && (
               <div className="text-[11px] text-teal-900 font-mono mt-0.5 italic">
                 Attestation: {metadata.attestationNotes} ({metadata.attestationTimestamp?.slice(0, 10)})
@@ -310,6 +341,17 @@ export const DataLab: React.FC<DataLabProps> = ({
             >
               <RefreshCw className="w-3.5 h-3.5" />
               <span>Revoke Attestation</span>
+            </button>
+          )}
+
+          {marketDataService.hasPersistedData() && (
+            <button
+              onClick={handleClearLocalStorage}
+              className="px-3 py-1.5 bg-white hover:bg-rose-50 text-rose-700 border border-rose-200 rounded-md text-xs font-mono font-medium shadow-xs transition-colors flex items-center gap-1.5"
+              title="Clear dataset stored in browser localStorage and reset"
+            >
+              <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+              <span>Clear Local Storage</span>
             </button>
           )}
 
@@ -385,6 +427,46 @@ export const DataLab: React.FC<DataLabProps> = ({
               <FileSpreadsheet className="w-3.5 h-3.5" />
               <span>Download sample Bhavcopy template (.csv)</span>
             </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Workstream 1: MCX India Bhavcopy Manual Download & Akamai Protection Guide */}
+      <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+          <div className="flex items-center gap-2">
+            <ShieldAlert className="w-4 h-4 text-amber-600" />
+            <h3 className="text-sm font-bold text-slate-900 font-mono">
+              Official MCX Bhavcopy Download Guide & Akamai Edge Disclosure
+            </h3>
+          </div>
+          <a
+            href="https://www.mcxindia.com/market-data/bhavcopy"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-mono font-bold text-xs rounded transition-colors self-start sm:self-auto"
+          >
+            <span>Open MCX Bhavcopy Portal</span>
+            <ExternalLink className="w-3.5 h-3.5" />
+          </a>
+        </div>
+
+        <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs text-slate-700 space-y-2">
+          <p className="leading-relaxed">
+            <strong>Why Automated Scrapers Fail:</strong> Multi Commodity Exchange of India (MCX) protects its market data portals using <strong>Akamai Edge Security / Bot Manager</strong>. Direct automated background requests (via <code className="font-mono bg-slate-200 px-1 py-0.5 rounded text-[11px]">curl</code>, python <code className="font-mono bg-slate-200 px-1 py-0.5 rounded text-[11px]">requests</code>, or headless browser automation) receive an immediate <strong className="text-rose-700 font-mono">HTTP 403 Forbidden (Server: AkamaiGHost)</strong> response without active human browser session cookies.
+          </p>
+          <div className="border-t border-slate-200 pt-2">
+            <span className="font-bold text-slate-900 block font-mono text-[11px] uppercase mb-1">
+              Manual Browser Download Instructions (30 Seconds):
+            </span>
+            <ol className="list-decimal pl-5 space-y-1 font-mono text-[11px] text-slate-600">
+              <li>Open <a href="https://www.mcxindia.com/market-data/bhavcopy" target="_blank" rel="noopener noreferrer" className="text-amber-700 underline font-semibold">https://www.mcxindia.com/market-data/bhavcopy</a> in your web browser.</li>
+              <li>Under <strong>Market Type</strong>, select <span className="text-slate-900 font-bold">Futures</span>.</li>
+              <li>Under <strong>Commodity</strong>, select <span className="text-slate-900 font-bold">BULLION / GOLD</span>.</li>
+              <li>Select your trade date or date range and click <span className="text-slate-900 font-bold">Show</span>.</li>
+              <li>Click <span className="text-slate-900 font-bold">Export to CSV</span> to download the authentic MCX Bhavcopy file to your computer.</li>
+              <li>Drag and drop the downloaded file into the upload zone above. AUREX handles all date formats, cleans whitespace, quarantines corrupted OHLC records, normalizes quotes to 10g 995 fineness, and stores the records locally in your browser.</li>
+            </ol>
           </div>
         </div>
       </div>
@@ -568,7 +650,7 @@ export const DataLab: React.FC<DataLabProps> = ({
                 Ready to Import: {parsePreview.metadata.validRows} Valid Records
               </h3>
               <p className="text-xs text-slate-500">
-                File: {parsePreview.metadata.filename} • Rejected: {parsePreview.metadata.rejectedRows} rows
+                File: {parsePreview.metadata.filename} â€¢ Rejected: {parsePreview.metadata.rejectedRows} rows
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -678,7 +760,7 @@ export const DataLab: React.FC<DataLabProps> = ({
               <div className="bg-slate-50 p-2.5 rounded border border-slate-200 space-y-1 font-mono text-[11px]">
                 <div>File: <strong className="text-slate-900">{metadata.filename}</strong></div>
                 <div>Imported at: {metadata.importTimestamp}</div>
-                <div>Date Range: {metadata.dateRange.start} → {metadata.dateRange.end}</div>
+                <div>Date Range: {metadata.dateRange.start} â†’ {metadata.dateRange.end}</div>
                 <div>Observations: {metadata.validRows} valid rows</div>
                 <div className="text-slate-600 text-[10px] pt-1 border-t border-slate-200 mt-1">
                   Resulting Classification: <span className="font-bold text-teal-800">USER-ATTESTED SOURCE — NOT INDEPENDENTLY VERIFIED</span>

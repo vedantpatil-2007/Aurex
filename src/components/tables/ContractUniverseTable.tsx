@@ -3,18 +3,18 @@ import { NormalizedObservation, ContractSymbol } from '../../types/market';
 import { CONTRACT_SPECIFICATIONS } from '../../data/contracts';
 import { getNormalizationBreakdown } from '../../engines/normalizationEngine';
 import { formatINR, formatNumber } from '../../utils/formatters';
-import { 
-  Search, 
-  ArrowUpDown, 
-  ChevronDown, 
-  ChevronUp, 
-  Scale, 
-  Clock, 
-  BarChart3, 
-  ShieldCheck, 
-  Info,
-  Maximize2
+import {
+  Search,
+  ArrowUpDown,
+  ChevronDown,
+  ChevronUp,
+  Scale,
+  Clock,
+  BarChart3,
+  Info
 } from 'lucide-react';
+
+const ALL_SYMBOLS: ContractSymbol[] = ['GOLDM', 'GOLDTEN', 'GOLDGUINEA', 'GOLDPETAL'];
 
 interface ContractUniverseTableProps {
   observations: NormalizedObservation[];
@@ -46,10 +46,8 @@ export const ContractUniverseTable: React.FC<ContractUniverseTableProps> = ({
     return map;
   }, [observations]);
 
-  const allSymbols: ContractSymbol[] = ['GOLDM', 'GOLDTEN', 'GOLDGUINEA', 'GOLDPETAL'];
-
   const filteredData = useMemo(() => {
-    return allSymbols
+    return ALL_SYMBOLS
       .map(sym => latestBySymbol.get(sym))
       .filter((obs): obs is NormalizedObservation => {
         if (!obs) return false;
@@ -126,7 +124,7 @@ export const ContractUniverseTable: React.FC<ContractUniverseTableProps> = ({
         </div>
 
         <div className="text-xs text-slate-500 font-mono">
-          Showing {filteredData.length} of {allSymbols.length} contracts
+          Showing {filteredData.length} of {ALL_SYMBOLS.length} contracts
         </div>
       </div>
 

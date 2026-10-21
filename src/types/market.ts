@@ -6,10 +6,14 @@ export interface ContractSpecification {
   contractSizeGrams: number; // in grams
   quoteUnitGrams: number;     // in grams
   purityPermille: number;     // 995 or 999
-  expiryScheduleDesc: string; // e.g. "3rd–5th of month" or "27th–31st of month"
+  expiryScheduleDesc: string; // e.g. "3rdâ€“5th of month" or "27thâ€“31st of month"
   tickSize: number;           // ₹
   tradingLotDescription: string;
   deliveryUnit: string;
+  listingEffectiveDate?: string; // e.g. "2025-04-01" for GOLDTEN
+  tenderPeriodDays?: number;     // 5 days
+  deliveryMechanism?: string;    // "Compulsory Delivery"
+  officialCircular?: string;
 }
 
 export interface MarketObservation {
@@ -148,6 +152,9 @@ export interface ContractCoverageItem {
 export interface DatasetMetadata {
   provenance: DataProvenance;
   filename?: string;
+  fileHashSha256?: string;
+  sourceUrl?: string;
+  storagePersistence?: 'LOCAL_STORAGE' | 'SESSION_MEMORY' | 'BUNDLED_CODE';
   importTimestamp?: string;
   totalRows: number;
   validRows: number;
@@ -183,6 +190,8 @@ export interface DataHealthSummary {
   contractCoverage: string;
   importTimestamp?: string;
   filename?: string;
+  fileHashSha256?: string;
+  storagePersistence?: string;
   isUserAttested?: boolean;
   attestationNotes?: string;
   attestationTimestamp?: string;
@@ -190,9 +199,9 @@ export interface DataHealthSummary {
   verificationNotes?: string;
 }
 
-export type ComparabilityClassification = 
-  | 'COMPARABLE' 
-  | 'COMPARABLE WITH MATURITY DIFFERENCE' 
+export type ComparabilityClassification =
+  | 'COMPARABLE'
+  | 'COMPARABLE WITH MATURITY DIFFERENCE'
   | 'INSUFFICIENT DATA';
 
 export interface PairComparabilityReport {
@@ -258,3 +267,192 @@ export interface JudgeWalkthroughStep {
   focusPair?: [ContractSymbol, ContractSymbol];
 }
 
+/* ========================================================================
+ * WORKSTREAM 2: Term Structure, Futures Curve & Carry Analytics Types
+ * ======================================================================== */
+
+export interface TermStructurePoint {
+  symbol: ContractSymbol;
+  expiryDate: string;
+  daysToExpiry: number;
+  rawPrice: number;
+  normalizedPrice: number;
+  volume: number;
+  openInterest: number;
+  adjacentSpread?: number;       // ₹ / 10g vs previous (nearer) expiry
+  adjacentSpreadPct?: number;    // % vs previous expiry
+}
+
+export interface FuturesCurve {
+  date: string;
+  symbol: ContractSymbol;
+  points: TermStructurePoint[];
+  nearPoint?: TermStructurePoint;
+  farPoint?: TermStructurePoint;
+  spreadNearFar?: number;
+  spreadNearFarPct?: number;
+  daysBetweenExpiries?: number;
+  annualizedSimpleCarry?: number;
+  annualizedCompoundedCarry?: number;
+}
+
+export interface ConstantMaturityReference {
+  tenorDays: number;
+  interpolatedPrice: number;
+  isExtrapolated: boolean;
+  status: 'VALID' | 'OUT_OF_RANGE' | 'INSUFFICIENT_EXPIRIES';
+}
+
+export interface RollDownDecomposition {
+  symbol: ContractSymbol;
+  tenorDays: number;
+  dateCurrent: string;
+  datePrevious: string;
+  priceCurrent: number;
+  pricePrevious: number;
+  totalChange: number;
+  mechanicalRollDown: number;
+  curveShift: number;
+  explanation: string;
+}
+
+/* ========================================================================
+ * WORKSTREAM 3 & 4: Walk-Forward Backtesting, Accounting & Attribution Types
+ * ======================================================================== */
+
+export type PositionDirection = 'LONG_SPREAD' | 'SHORT_SPREAD';
+export type TradeExitReason =
+  | 'TARGET_CONVERGENCE'
+  | 'STOP_LOSS'
+  | 'MAX_HOLDING_PERIOD'
+  | 'TENDER_WINDOW_FORCED_EXIT'
+  | 'END_OF_SIMULATION';
+
+export interface TradeAttribution {
+  goldMarketBetaPnL: number;     // Movement attributable to overall gold market trend
+  relativeValueAlphaPnL: number; // Movement attributable to spread convergence
+  executionFriction: number;     // Entry + exit friction costs
+  residualPnL: number;           // Basis drift / residual imbalance
+}
+
+export interface BacktestTrade {
+  tradeId: string;
+  pair: [ContractSymbol, ContractSymbol];
+  direction: PositionDirection;
+  entryDate: string;
+  exitDate?: string;
+  entryPriceA: number;
+  entryPriceB: number;
+  exitPriceA?: number;
+  exitPriceB?: number;
+  entrySpread: number;
+  exitSpread?: number;
+  lotQuantityA: number;
+  lotQuantityB: number;
+  normalizedGrams: number;
+  grossPnL: number;
+  entryFriction: number;
+  exitFriction: number;
+  totalFriction: number;
+  netPnL: number;
+  status: 'OPEN' | 'CLOSED';
+  exitReason?: TradeExitReason;
+  holdingDays: number;
+  attribution?: TradeAttribution;
+}
+
+export interface BacktestParameters {
+  pair: [ContractSymbol, ContractSymbol];
+  zScoreEntryThreshold: number;   // e.g. 1.5
+  zScoreExitThreshold: number;    // e.g. 0.0 (mean reversion)
+  zScoreStopLoss?: number;        // e.g. 3.0
+  maxHoldingDays: number;         // e.g. 15
+  friction: FrictionAssumptions;
+  warmUpDays: number;             // e.g. 20
+  capitalAllocationINR: number;   // e.g. 1,000,000
+}
+
+export interface BacktestEquityPoint {
+  date: string;
+  equity: number;
+  drawdown: number;
+  pnl: number;
+  activePositions: number;
+}
+
+export interface BacktestPerformanceSummary {
+  pair: [ContractSymbol, ContractSymbol];
+  totalCandidateSignals: number;
+  acceptedTrades: number;
+  rejectedSignals: number;
+  rejectionBreakdown: Record<string, number>;
+  completedTrades: number;
+  openTrades: number;
+  winCount: number;
+  lossCount: number;
+  winRatePct: number;
+  grossPnL: number;
+  totalFrictionCosts: number;
+  netPnL: number;
+  profitFactor: number;
+  maxDrawdownINR: number;
+  maxDrawdownPct: number;
+  sharpeRatio: number;
+  avgTradeDurationDays: number;
+  avgTradePnL: number;
+  dailyEquityCurve: BacktestEquityPoint[];
+  trades: BacktestTrade[];
+  attributionSummary: {
+    totalGoldBetaPnL: number;
+    totalRelativeValueAlphaPnL: number;
+    totalFrictionCost: number;
+    totalResidualPnL: number;
+  };
+}
+
+/* ========================================================================
+ * WORKSTREAM 5: Contract Lifecycle Intelligence Types
+ * ======================================================================== */
+
+export interface ContractDeliveryRules {
+  symbol: ContractSymbol;
+  deliveryType: 'COMPULSORY_DELIVERY';
+  tenderPeriodDays: number;        // 5 trading days prior to expiry
+  deliveryUnit: string;
+  deliveryCenter: string;
+  listingEffectiveDate: string;    // e.g. "2025-04-01" for GOLDTEN
+  officialCircularReference: string;
+}
+
+export interface LifecycleEligibilityCheck {
+  symbol: ContractSymbol;
+  date: string;
+  expiryDate: string;
+  daysToExpiry: number;
+  lifecycleStage: ContractLifecycleStage;
+  isEligibleForNewEntry: boolean;
+  mustForcedExit: boolean;
+  warnings: string[];
+  rejectionReason?: string;
+}
+
+/* ========================================================================
+ * WORKSTREAM 6: Trader Intelligence, Signal Quality & Alert Types
+ * ======================================================================== */
+
+export type AlertSeverity = 'INFO' | 'WARNING' | 'ACTION_REQUIRED' | 'CRITICAL';
+export type AlertCategory = 'SIGNAL' | 'LIFECYCLE' | 'DATA_HEALTH' | 'COST_HURDLE' | 'SYSTEM';
+
+export interface PlatformAlert {
+  id: string;
+  timestamp: string;
+  category: AlertCategory;
+  severity: AlertSeverity;
+  title: string;
+  message: string;
+  pair?: [ContractSymbol, ContractSymbol];
+  symbol?: ContractSymbol;
+  triggerRule?: string;
+  sourceProvenance?: DataProvenance;
+  isRead?: boolean;
+}

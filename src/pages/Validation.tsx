@@ -1,25 +1,18 @@
 import React, { useMemo } from 'react';
-import { 
-  NormalizedObservation, 
-  ContractSymbol, 
-  FrictionAssumptions 
+import {
+  NormalizedObservation,
+  ContractSymbol,
+  FrictionAssumptions
 } from '../types/market';
 import { buildPairSpreadSeries } from '../engines/relativeValueEngine';
 import { generateWalkForwardWindows } from '../engines/validationEngine';
 import { WalkForwardTimelineChart } from '../components/charts/WalkForwardTimelineChart';
+import { BacktestDashboard } from '../components/backtest/BacktestDashboard';
 import { MetricCard } from '../components/cards/MetricCard';
 import { formatINR } from '../utils/formatters';
-import { 
-  CheckCircle2, 
-  ShieldCheck, 
-  EyeOff, 
-  DollarSign, 
+import {
   ArrowRight,
-  History,
-  Database,
-  Cpu,
-  Eye,
-  Award
+  History
 } from 'lucide-react';
 
 import { marketDataService } from '../services/marketDataService';
@@ -50,10 +43,10 @@ export const Validation: React.FC<ValidationPageProps> = ({
   }, [spreadSeries, friction]);
 
   // Aggregate prototype metrics across windows
-  const avgGrossEdge = windows.length > 0 
+  const avgGrossEdge = windows.length > 0
     ? Number((windows.reduce((acc, w) => acc + w.outOfSampleObservedEdge, 0) / windows.length).toFixed(2))
     : 0;
-  
+
   const estimatedCost = windows.length > 0 ? windows[0].estimatedFriction : 0;
   const avgNetEdge = Number((avgGrossEdge - estimatedCost).toFixed(2));
 
@@ -69,7 +62,7 @@ export const Validation: React.FC<ValidationPageProps> = ({
             <span className="text-xs text-slate-500 font-medium">Quantitative Validation Discipline</span>
           </div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight mt-1 font-mono">
-            Walk-Forward Validation
+            Walk-Forward Validation & Backtesting
           </h1>
           <p className="text-xs text-slate-600 mt-1 max-w-2xl">
             Strict chronological out-of-sample testing for pair <span className="font-mono font-bold text-slate-900">{selectedPair[0]} / {selectedPair[1]}</span>. Re-calibrates parameters in-sample and evaluates performance strictly on unseen future test windows under cost friction without look-ahead bias.
@@ -113,7 +106,7 @@ export const Validation: React.FC<ValidationPageProps> = ({
               1
             </div>
             <div className="font-mono font-bold text-xs text-slate-900">Training Data</div>
-            <div className="text-[10px] text-slate-500 font-mono">Window t-k → t-1</div>
+            <div className="text-[10px] text-slate-500 font-mono">Window t-k â†’ t-1</div>
             <div className="text-[10px] text-slate-400 leading-tight pt-1">
               Historical calibration slice quarantined from future data
             </div>
@@ -125,7 +118,7 @@ export const Validation: React.FC<ValidationPageProps> = ({
               2
             </div>
             <div className="font-mono font-bold text-xs text-slate-900">Parameter Estimation</div>
-            <div className="text-[10px] text-sky-700 font-mono">In-Sample Fit (μ, σ)</div>
+            <div className="text-[10px] text-sky-700 font-mono">In-Sample Fit (Î¼, Ïƒ)</div>
             <div className="text-[10px] text-slate-400 leading-tight pt-1">
               Parameters calibrated solely on historical training window
             </div>
@@ -139,7 +132,7 @@ export const Validation: React.FC<ValidationPageProps> = ({
             <div className="font-mono font-bold text-xs text-slate-900">Unseen Test Window</div>
             <div className="text-[10px] text-amber-800 font-mono">Out-of-Sample (t)</div>
             <div className="text-[10px] text-slate-400 leading-tight pt-1">
-              Strictly unseen future observations evaluate performance
+              Zero look-ahead evaluation on strictly future data point
             </div>
           </div>
 
@@ -148,61 +141,29 @@ export const Validation: React.FC<ValidationPageProps> = ({
             <div className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-800 mx-auto flex items-center justify-center font-mono font-bold text-xs">
               4
             </div>
-            <div className="font-mono font-bold text-xs text-slate-900">Validation Result</div>
-            <div className="text-[10px] text-emerald-700 font-mono">Cost-Aware Net Edge</div>
+            <div className="font-mono font-bold text-xs text-slate-900">Net Edge Realization</div>
+            <div className="text-[10px] text-emerald-800 font-mono">Gross âˆ’ Friction</div>
             <div className="text-[10px] text-slate-400 leading-tight pt-1">
-              Verdict declared only if net edge survives simulated friction
+              Evaluate edge survival against realistic transaction costs
             </div>
           </div>
         </div>
       </div>
 
-      {/* 3 Core Quantitative Validation Principles Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* Principle 1: No Look-Ahead */}
-        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500 font-mono">Principle 1</span>
-            <EyeOff className="w-4 h-4 text-amber-600" />
-          </div>
-          <div className="text-sm font-bold text-slate-900 font-mono">NO LOOK-AHEAD BIAS</div>
-          <p className="text-xs text-slate-600 leading-relaxed">
-            Parameters and rolling statistics are calculated strictly using observations available up to t-1. Information from future settlement sessions is mathematically quarantined.
-          </p>
-        </div>
+      {/* Workstream 3: Interactive Walk-Forward Backtesting Simulator & Trade Ledger */}
+      <BacktestDashboard
+        observations={observations}
+        selectedPair={selectedPair}
+        defaultFriction={friction}
+      />
 
-        {/* Principle 2: Out-Of-Sample */}
-        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500 font-mono">Principle 2</span>
-            <ShieldCheck className="w-4 h-4 text-blue-600" />
-          </div>
-          <div className="text-sm font-bold text-slate-900 font-mono">OUT-OF-SAMPLE EVALUATION</div>
-          <p className="text-xs text-slate-600 leading-relaxed">
-            The test window (t) remains unseen during parameter calibration. Decisions are tested against fresh market data to eliminate curve-fitting and survivorship artifacts.
-          </p>
-        </div>
-
-        {/* Principle 3: Cost-Aware */}
-        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500 font-mono">Principle 3</span>
-            <DollarSign className="w-4 h-4 text-rose-600" />
-          </div>
-          <div className="text-sm font-bold text-slate-900 font-mono">COST-AWARE HURDLE</div>
-          <p className="text-xs text-slate-600 leading-relaxed">
-            Every candidate dislocation is evaluated after deducting bid-ask slippage, STT, turnover fees, and execution safety buffers. Unprofitable gross signals are discarded.
-          </p>
-        </div>
-      </div>
-
-      {/* Prototype Metrics Cards with Strict Simulation Labeling */}
+      {/* Aggregate Performance Summary Card */}
       <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-4">
         <div className="flex items-center justify-between border-b border-slate-100 pb-3">
           <div className="flex items-center gap-2">
             <History className="w-4 h-4 text-amber-600" />
             <h3 className="text-sm font-bold text-slate-900 font-mono">
-              Aggregate Out-of-Sample Performance Summary
+              Rolling Window Statistical Edge Summary
             </h3>
           </div>
           <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 font-mono">

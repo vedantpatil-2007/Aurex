@@ -7,11 +7,11 @@ import { marketDataService } from './services/marketDataService';
 import { validateMarketData } from './utils/dataQuality';
 import { buildPairSpreadSeries } from './engines/relativeValueEngine';
 import { evaluateDecision } from './engines/decisionEngine';
-import { 
-  ContractSymbol, 
-  FrictionAssumptions, 
+import {
+  ContractSymbol,
+  FrictionAssumptions,
   NormalizedObservation,
-  MarketObservation 
+  MarketObservation
 } from './types/market';
 
 // Pages
@@ -29,13 +29,13 @@ export function App() {
   const [activePage, setActivePage] = useState<NavigationPage>(() => {
     const hash = window.location.hash.replace('#/', '').replace('#', '');
     const validPages: NavigationPage[] = [
-      'overview', 
-      'data-lab', 
-      'contracts', 
-      'normalization', 
-      'relative-value', 
-      'ledger', 
-      'validation', 
+      'overview',
+      'data-lab',
+      'contracts',
+      'normalization',
+      'relative-value',
+      'ledger',
+      'validation',
       'decision'
     ];
     if (validPages.includes(hash as NavigationPage)) {
@@ -50,13 +50,13 @@ export function App() {
     const handleHashChange = () => {
       const hash = window.location.hash.replace('#/', '').replace('#', '');
       const validPages: NavigationPage[] = [
-        'overview', 
-        'data-lab', 
-        'contracts', 
-        'normalization', 
-        'relative-value', 
-        'ledger', 
-        'validation', 
+        'overview',
+        'data-lab',
+        'contracts',
+        'normalization',
+        'relative-value',
+        'ledger',
+        'validation',
         'decision'
       ];
       if (validPages.includes(hash as NavigationPage)) {
@@ -229,8 +229,8 @@ export function App() {
   return (
     <div className="min-h-screen flex bg-slate-100 font-sans text-slate-800 overflow-x-hidden">
       {/* Sidebar Navigation */}
-      <Sidebar 
-        activePage={activePage} 
+      <Sidebar
+        activePage={activePage}
         onNavigate={handleNavigate}
         isOpen={isMobileMenuOpen}
         onClose={() => setIsMobileMenuOpen(false)}
@@ -239,9 +239,11 @@ export function App() {
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 overflow-x-hidden">
         {/* Header with Mobile Hamburger */}
-        <Header 
-          currentDate={selectedDate} 
-          selectedPair={selectedPair} 
+        <Header
+          currentDate={selectedDate}
+          selectedPair={selectedPair}
+          decision={decisionResult}
+          metadata={datasetMetadata}
           onToggleMobileMenu={() => setIsMobileMenuOpen(prev => !prev)}
         />
 
@@ -259,7 +261,7 @@ export function App() {
         )}
 
         {/* Persistent Provenance & Quality Banner */}
-        <PrototypeBanner 
+        <PrototypeBanner
           provenance={provenance}
           filename={datasetMetadata.filename}
           dataQualityStatus={dataQualityReport.status}

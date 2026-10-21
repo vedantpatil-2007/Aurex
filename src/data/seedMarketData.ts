@@ -2,15 +2,16 @@ import { MarketObservation } from '../types/market';
 
 /**
  * PROTOTYPE SIMULATION SEED DATA
- * 
- * Generated based on official MCX PS03 contract parameters and historical gold volatility.
+ *
+ * Generated based on official MCX PS03 contract parameters, multi-expiry term structure,
+ * and historical Indian gold volatility.
  * Standard Indian gold price range: ₹73,000 - ₹77,500 per 10g benchmark.
- * 
- * Contracts:
- * - GOLDM: 100g contract, 10g quote, 995 purity
- * - GOLDTEN: 10g contract, 10g quote, 999 purity
- * - GOLDGUINEA: 8g contract, 8g quote, 999 purity
- * - GOLDPETAL: 1g contract, 1g quote, 999 purity
+ *
+ * Contracts & Discrete Expiries:
+ * - GOLDM: 100g contract, 10g quote, 995 purity (Expiries: 2026-11-05 near, 2026-12-05 next, 2027-02-05 far)
+ * - GOLDTEN: 10g contract, 10g quote, 999 purity (Expiries: 2026-10-30 near, 2026-11-27 next)
+ * - GOLDGUINEA: 8g contract, 8g quote, 999 purity (Expiry: 2026-10-30)
+ * - GOLDPETAL: 1g contract, 1g quote, 999 purity (Expiry: 2026-10-30)
  */
 
 function generateDeterministicSeedData(): MarketObservation[] {
@@ -53,7 +54,7 @@ function generateDeterministicSeedData(): MarketObservation[] {
     // GOLDPETAL retail granularity premium
     const petal_dislocation = 30 + Math.sin(index * 0.19) * 50;
 
-    // 1. GOLDM (Quote 10g, Purity 995, Expiry 2026-11-05)
+    // 1. GOLDM Near (Quote 10g, Purity 995, Expiry 2026-11-05)
     // Formula: Raw = Benchmark * (10 / 10) * (995 / 999) + small basis
     const goldmNormTarget = baseGold10g999;
     const goldmRaw = Number(((goldmNormTarget * (10 / 10) * (995 / 999))).toFixed(2));
@@ -76,7 +77,49 @@ function generateDeterministicSeedData(): MarketObservation[] {
       openInterest: goldmOI
     });
 
-    // 2. GOLDTEN (Quote 10g, Purity 999, Expiry 2026-10-30)
+    // 1b. GOLDM Next Month Expiry (2026-12-05) - ~30 calendar days forward carry (~7% p.a.)
+    const carryNext30d = Number((goldmClose * 0.07 * (30 / 365)).toFixed(2));
+    const goldmNextClose = Number((goldmClose + carryNext30d).toFixed(2));
+    const goldmNextOpen = Number((goldmNextClose - 35 + ((index * 11) % 70)).toFixed(2));
+    const goldmNextHigh = Number((Math.max(goldmNextOpen, goldmNextClose) + 55).toFixed(2));
+    const goldmNextLow = Number((Math.min(goldmNextOpen, goldmNextClose) - 50).toFixed(2));
+    const goldmNextVol = Math.floor(goldmVol * 0.32);
+    const goldmNextOI = Math.floor(goldmOI * 0.42);
+
+    records.push({
+      date,
+      symbol: 'GOLDM',
+      expiryDate: '2026-12-05',
+      open: goldmNextOpen,
+      high: goldmNextHigh,
+      low: goldmNextLow,
+      close: goldmNextClose,
+      volume: goldmNextVol,
+      openInterest: goldmNextOI
+    });
+
+    // 1c. GOLDM Far Expiry (2027-02-05) - ~92 calendar days forward carry (~7.2% p.a.)
+    const carryFar92d = Number((goldmClose * 0.072 * (92 / 365)).toFixed(2));
+    const goldmFarClose = Number((goldmClose + carryFar92d).toFixed(2));
+    const goldmFarOpen = Number((goldmFarClose - 45 + ((index * 9) % 80)).toFixed(2));
+    const goldmFarHigh = Number((Math.max(goldmFarOpen, goldmFarClose) + 65).toFixed(2));
+    const goldmFarLow = Number((Math.min(goldmFarOpen, goldmFarClose) - 60).toFixed(2));
+    const goldmFarVol = Math.floor(goldmVol * 0.12);
+    const goldmFarOI = Math.floor(goldmOI * 0.20);
+
+    records.push({
+      date,
+      symbol: 'GOLDM',
+      expiryDate: '2027-02-05',
+      open: goldmFarOpen,
+      high: goldmFarHigh,
+      low: goldmFarLow,
+      close: goldmFarClose,
+      volume: goldmFarVol,
+      openInterest: goldmFarOI
+    });
+
+    // 2. GOLDTEN Near (Quote 10g, Purity 999, Expiry 2026-10-30)
     // Raw = Benchmark (10g @ 999) - dislocation
     const goldtenNormTarget = baseGold10g999 - m_ten_dislocation;
     const goldtenRaw = Number(((goldtenNormTarget * (10 / 10) * (999 / 999))).toFixed(2));
@@ -97,6 +140,27 @@ function generateDeterministicSeedData(): MarketObservation[] {
       close: goldtenClose,
       volume: goldtenVol,
       openInterest: goldtenOI
+    });
+
+    // 2b. GOLDTEN Next Month Expiry (2026-11-27) - ~28 calendar days forward carry (~6.8% p.a.)
+    const carryTen28d = Number((goldtenClose * 0.068 * (28 / 365)).toFixed(2));
+    const goldtenNextClose = Number((goldtenClose + carryTen28d).toFixed(2));
+    const goldtenNextOpen = Number((goldtenNextClose - 30 + ((index * 7) % 50)).toFixed(2));
+    const goldtenNextHigh = Number((Math.max(goldtenNextOpen, goldtenNextClose) + 50).toFixed(2));
+    const goldtenNextLow = Number((Math.min(goldtenNextOpen, goldtenNextClose) - 45).toFixed(2));
+    const goldtenNextVol = Math.floor(goldtenVol * 0.28);
+    const goldtenNextOI = Math.floor(goldtenOI * 0.38);
+
+    records.push({
+      date,
+      symbol: 'GOLDTEN',
+      expiryDate: '2026-11-27',
+      open: goldtenNextOpen,
+      high: goldtenNextHigh,
+      low: goldtenNextLow,
+      close: goldtenNextClose,
+      volume: goldtenNextVol,
+      openInterest: goldtenNextOI
     });
 
     // 3. GOLDGUINEA (Quote 8g, Purity 999, Expiry 2026-10-30)
