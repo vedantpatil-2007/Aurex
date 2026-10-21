@@ -261,7 +261,7 @@ export const Ledger: React.FC<LedgerPageProps> = ({
                     Accounting Identity: {accountingReconciliation.reconciled ? 'VERIFIED (0 Residue)' : 'UNRECONCILED DISCREPANCY'}
                   </span>
                   <span className="text-xs font-mono text-slate-700">
-                    Net P&L = Gross Alpha âˆ’ Frictions
+                    Net Realized P&L = Gross Realized P&L (Alpha + Beta) − Total Frictions
                   </span>
                 </div>
                 <div className="text-xs text-slate-700 mt-1 font-mono">

@@ -8,6 +8,42 @@ import {
 } from '../types/market';
 
 /**
+ * Calculates simple annualized implied carry:
+ * 100 × ((F / S) - 1) × (365 / ΔD)
+ */
+export function calculateSimpleCarry(nearPrice: number, farPrice: number, deltaDays: number): number | null {
+  if (deltaDays <= 0 || !isFinite(nearPrice) || !isFinite(farPrice) || nearPrice <= 0 || farPrice <= 0) {
+    return null;
+  }
+  return Number((100 * ((farPrice / nearPrice) - 1) * (365 / deltaDays)).toFixed(2));
+}
+
+/**
+ * Calculates continuously compounded annualized implied carry:
+ * 100 × ln(F / S) × (365 / ΔD)
+ */
+export function calculateContinuousCarry(nearPrice: number, farPrice: number, deltaDays: number): number | null {
+  if (deltaDays <= 0 || !isFinite(nearPrice) || !isFinite(farPrice) || nearPrice <= 0 || farPrice <= 0) {
+    return null;
+  }
+  return Number((100 * Math.log(farPrice / nearPrice) * (365 / deltaDays)).toFixed(2));
+}
+
+/**
+ * Calculates annualized geometric compounding carry:
+ * 100 × ((F / S)^(365 / ΔD) - 1)
+ *
+ * NOTE: This represents geometric annualization and is mathematically distinct
+ * from continuous compounding (100 × ln(F/S) × 365/ΔD).
+ */
+export function calculateGeometricCarry(nearPrice: number, farPrice: number, deltaDays: number): number | null {
+  if (deltaDays <= 0 || !isFinite(nearPrice) || !isFinite(farPrice) || nearPrice <= 0 || farPrice <= 0) {
+    return null;
+  }
+  return Number((100 * (Math.pow(farPrice / nearPrice, 365 / deltaDays) - 1)).toFixed(2));
+}
+
+/**
  * Builds an official-standard futures term structure curve for a given contract and trading date.
  * Groups observations by verified discrete expiry, sorted strictly by days to expiry (DTE).
  */
@@ -22,7 +58,8 @@ export function buildFuturesCurve(
     return {
       date,
       symbol,
-      points: []
+      points: [],
+      carryCalculationStatus: 'INSUFFICIENT_EXPIRIES'
     };
   }
 
@@ -44,7 +81,9 @@ export function buildFuturesCurve(
     if (idx > 0) {
       const prev = sorted[idx - 1];
       adjacentSpread = Number((obs.normalizedPrice - prev.normalizedPrice).toFixed(2));
-      adjacentSpreadPct = Number(((adjacentSpread / prev.normalizedPrice) * 100).toFixed(4));
+      adjacentSpreadPct = prev.normalizedPrice > 0
+        ? Number(((adjacentSpread / prev.normalizedPrice) * 100).toFixed(4))
+        : undefined;
     }
 
     return {
@@ -67,20 +106,42 @@ export function buildFuturesCurve(
   let spreadNearFarPct: number | undefined = undefined;
   let daysBetweenExpiries: number | undefined = undefined;
   let annualizedSimpleCarry: number | undefined = undefined;
+  let annualizedContinuousCarry: number | undefined = undefined;
   let annualizedCompoundedCarry: number | undefined = undefined;
+  let annualizedGeometricCarry: number | undefined = undefined;
+  let carryCalculationStatus: 'VALID' | 'EQUAL_EXPIRIES' | 'INSUFFICIENT_EXPIRIES' | 'INVALID_PRICES' = 'INSUFFICIENT_EXPIRIES';
 
   if (nearPoint && farPoint && nearPoint.expiryDate !== farPoint.expiryDate) {
-    daysBetweenExpiries = Math.max(1, farPoint.daysToExpiry - nearPoint.daysToExpiry);
-    spreadNearFar = Number((farPoint.normalizedPrice - nearPoint.normalizedPrice).toFixed(2));
-    spreadNearFarPct = Number(((spreadNearFar / nearPoint.normalizedPrice) * 100).toFixed(4));
+    const rawDeltaD = farPoint.daysToExpiry - nearPoint.daysToExpiry;
+    const pNear = nearPoint.normalizedPrice;
+    const pFar = farPoint.normalizedPrice;
 
-    // Annualized simple carry: 100 * ((Far / Near) - 1) * (365 / Î”Days)
-    const simpleRatio = (farPoint.normalizedPrice / nearPoint.normalizedPrice) - 1;
-    annualizedSimpleCarry = Number((100 * simpleRatio * (365 / daysBetweenExpiries)).toFixed(2));
+    if (rawDeltaD <= 0) {
+      // Inverted or equal expiries: strictly reject rather than substituting 30 days
+      carryCalculationStatus = 'EQUAL_EXPIRIES';
+    } else if (!isFinite(pNear) || !isFinite(pFar) || pNear <= 0 || pFar <= 0) {
+      // Missing, non-finite, zero or negative prices
+      carryCalculationStatus = 'INVALID_PRICES';
+    } else {
+      carryCalculationStatus = 'VALID';
+      daysBetweenExpiries = rawDeltaD;
+      spreadNearFar = Number((pFar - pNear).toFixed(2));
+      spreadNearFarPct = Number(((spreadNearFar / pNear) * 100).toFixed(4));
 
-    // Annualized continuously compounded carry: 100 * (365 / Î”Days) * ln(Far / Near)
-    const logRatio = Math.log(farPoint.normalizedPrice / nearPoint.normalizedPrice);
-    annualizedCompoundedCarry = Number((100 * (365 / daysBetweenExpiries) * logRatio).toFixed(2));
+      // 1. Annualized simple carry: 100 * ((Far / Near) - 1) * (365 / ΔD)
+      annualizedSimpleCarry = calculateSimpleCarry(pNear, pFar, daysBetweenExpiries) ?? undefined;
+
+      // 2. Continuously compounded carry: 100 * ln(Far / Near) * (365 / ΔD)
+      annualizedContinuousCarry = calculateContinuousCarry(pNear, pFar, daysBetweenExpiries) ?? undefined;
+      annualizedCompoundedCarry = annualizedContinuousCarry; // backwards-compatible alias
+
+      // 3. Annualized geometric carry: 100 * ((Far / Near)^(365 / ΔD) - 1)
+      annualizedGeometricCarry = calculateGeometricCarry(pNear, pFar, daysBetweenExpiries) ?? undefined;
+    }
+  } else if (nearPoint && farPoint && nearPoint.expiryDate === farPoint.expiryDate) {
+    carryCalculationStatus = 'EQUAL_EXPIRIES';
+  } else {
+    carryCalculationStatus = 'INSUFFICIENT_EXPIRIES';
   }
 
   return {
@@ -93,7 +154,10 @@ export function buildFuturesCurve(
     spreadNearFarPct,
     daysBetweenExpiries,
     annualizedSimpleCarry,
-    annualizedCompoundedCarry
+    annualizedContinuousCarry,
+    annualizedCompoundedCarry,
+    annualizedGeometricCarry,
+    carryCalculationStatus
   };
 }
 
@@ -173,6 +237,12 @@ export function interpolateConstantMaturity(
 /**
  * Decomposes price change into mechanical roll-down (aging along previous curve)
  * and true curve movement (shift of curve at matched constant tenor).
+ *
+ * Mathematical identity:
+ * Total Change = Mechanical Roll-Down + Curve Shift
+ * Where:
+ * - Mechanical Roll-Down = P_prev(T - Δt) - P_prev(T)  [Aging along prior curve]
+ * - Curve Shift = P_curr(T) - P_prev(T - Δt)           [Or Total Change - Roll-Down]
  */
 export function decomposeRollDownAndCurveShift(
   curveCurrent: FuturesCurve,
@@ -194,13 +264,13 @@ export function decomposeRollDownAndCurveShift(
   const agedTenor = Math.max(1, tenorDays - daysElapsed);
   const refPrevAged = interpolateConstantMaturity(curvePrevious, agedTenor);
 
-  let mechanicalRollDown = 0;
-  let curveShift = totalChange;
-
-  if (refPrevAged.status === 'VALID') {
-    mechanicalRollDown = Number((refPrevAged.interpolatedPrice - refPrevAtTenor.interpolatedPrice).toFixed(2));
-    curveShift = Number((totalChange - mechanicalRollDown).toFixed(2));
+  // Both tenors must be within observed range of previous curve
+  if (refPrevAged.status !== 'VALID') {
+    return null;
   }
+
+  const mechanicalRollDown = Number((refPrevAged.interpolatedPrice - refPrevAtTenor.interpolatedPrice).toFixed(2));
+  const curveShift = Number((totalChange - mechanicalRollDown).toFixed(2));
 
   let explanation = '';
   if (Math.abs(mechanicalRollDown) > Math.abs(curveShift)) {

@@ -344,4 +344,31 @@ describe('AUREX Round 2 Comprehensive Evidence Verification Suite', () => {
     expect(analysis.currentZScore).toBe(0); // Safely returns 0, no NaN
     expect(analysis.mean).toBe(0);
   });
+
+  // Area 14: Benchmark Normalization Verification (Workstream 2.1)
+  it('14. should verify authoritative normalization benchmarks across all gold contracts', () => {
+    // GOLDTEN: normalizePrice(74500, 10, 999) = 74500 (scaling factor 1.000000)
+    const normGoldTen = normalizePrice(74500, 10, 999);
+    expect(normGoldTen.normalizedPrice).toBe(74500.00);
+    expect(normGoldTen.unitAdjustment).toBe(1.000000);
+    expect(normGoldTen.purityAdjustment).toBe(1.000000);
+
+    // GOLDM: normalizePrice(74500, 10, 995) ≈ 74799.50 (scaling factor ~1.004020)
+    const normGoldM = normalizePrice(74500, 10, 995);
+    expect(normGoldM.normalizedPrice).toBe(74799.50);
+    expect(normGoldM.unitAdjustment).toBe(1.000000);
+    expect(normGoldM.purityAdjustment).toBeCloseTo(1.004020, 6);
+
+    // GOLDGUINEA: normalizePrice(59600, 8, 999) = 74500 (scaling factor 1.250000)
+    const normGuinea = normalizePrice(59600, 8, 999);
+    expect(normGuinea.normalizedPrice).toBe(74500.00);
+    expect(normGuinea.unitAdjustment).toBe(1.250000);
+    expect(normGuinea.purityAdjustment).toBe(1.000000);
+
+    // GOLDPETAL: normalizePrice(7450, 1, 999) = 74500 (scaling factor 10.000000)
+    const normPetal = normalizePrice(7450, 1, 999);
+    expect(normPetal.normalizedPrice).toBe(74500.00);
+    expect(normPetal.unitAdjustment).toBe(10.000000);
+    expect(normPetal.purityAdjustment).toBe(1.000000);
+  });
 });

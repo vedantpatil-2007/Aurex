@@ -6,13 +6,17 @@ import {
   DataHealthSummary,
   DataProvenance,
   DatasetMetadata,
-  TermStructurePoint
+  TermStructurePoint,
+  ContractCoverageItem,
+  ImportedSourceFileMetadata,
+  MergeAnalysis,
+  MergeConflictDetail
 } from '../types/market';
 import { CONTRACT_SPECIFICATIONS, CONTRACT_LIST } from '../data/contracts';
 import { SEED_MARKET_DATA } from '../data/seedMarketData';
 import { normalizeObservation } from '../engines/normalizationEngine';
 import { validateMarketData } from '../utils/dataQuality';
-import { parseBhavcopyCsv, ParseResult, ColumnMapping, computeFileSha256 } from './csvParserService';
+import { parseBhavcopyCsv, ParseResult, ColumnMapping, computeFileSha256, computeQuickHash } from './csvParserService';
 import { SAMPLE_MCX_BHAVCOPY_CSV } from '../data/sampleOfficialBhavcopy';
 
 type DataChangeListener = (observations: MarketObservation[]) => void;
@@ -203,6 +207,20 @@ class MarketDataService {
   }
 
   /**
+   * Alias for getHistoricalData returning all active market observations
+   */
+  public getObservations(): MarketObservation[] {
+    return this.getHistoricalData();
+  }
+
+  /**
+   * Alias for getMetadata
+   */
+  public getDatasetMetadata(): DatasetMetadata {
+    return this.getMetadata();
+  }
+
+  /**
    * Returns historical observations normalized to ₹ / 10g @ 999 purity.
    */
   public getNormalizedHistoricalData(filter?: {
@@ -328,39 +346,193 @@ class MarketDataService {
   }
 
   /**
+   * Recalculates discrete contract coverage across accumulated market records
+   */
+  private recalculateCoverage(records: MarketObservation[]): Record<ContractSymbol, ContractCoverageItem> {
+    const coverageMap: Record<ContractSymbol, { count: number; earliestDate: string; latestDate: string; expiries: Set<string> }> = {
+      GOLDM: { count: 0, earliestDate: '', latestDate: '', expiries: new Set() },
+      GOLDTEN: { count: 0, earliestDate: '', latestDate: '', expiries: new Set() },
+      GOLDGUINEA: { count: 0, earliestDate: '', latestDate: '', expiries: new Set() },
+      GOLDPETAL: { count: 0, earliestDate: '', latestDate: '', expiries: new Set() }
+    };
+
+    for (const r of records) {
+      const entry = coverageMap[r.symbol];
+      if (entry) {
+        entry.count++;
+        if (!entry.earliestDate || r.date < entry.earliestDate) entry.earliestDate = r.date;
+        if (!entry.latestDate || r.date > entry.latestDate) entry.latestDate = r.date;
+        entry.expiries.add(r.expiryDate);
+      }
+    }
+
+    return {
+      GOLDM: { ...coverageMap.GOLDM, expiries: Array.from(coverageMap.GOLDM.expiries) },
+      GOLDTEN: { ...coverageMap.GOLDTEN, expiries: Array.from(coverageMap.GOLDTEN.expiries) },
+      GOLDGUINEA: { ...coverageMap.GOLDGUINEA, expiries: Array.from(coverageMap.GOLDGUINEA.expiries) },
+      GOLDPETAL: { ...coverageMap.GOLDPETAL, expiries: Array.from(coverageMap.GOLDPETAL.expiries) }
+    };
+  }
+
+  /**
+   * Performs pre-import merge analysis.
+   * Compares incoming parsed records with existing observations to detect:
+   * - Genuine new trading dates / contracts to be accumulated.
+   * - Identical duplicate observations (idempotent).
+   * - Conflicting observations with same contract identity but divergent prices/values.
+   * - Accurate counts of unsupported instruments and malformed rows.
+   */
+  public analyzeImportMerge(
+    csvContent: string,
+    filename = 'user_upload.csv',
+    customMapping?: Partial<ColumnMapping>,
+    knownFileHash?: string
+  ): { parseResult: ParseResult; mergeAnalysis: MergeAnalysis } {
+    const parseResult = parseBhavcopyCsv(
+      csvContent,
+      filename,
+      'USER-IMPORTED DATA — SOURCE UNVERIFIED',
+      customMapping,
+      knownFileHash
+    );
+
+    const isAccumulating =
+      this.provenance === 'USER-IMPORTED DATA — SOURCE UNVERIFIED' ||
+      this.provenance === 'USER-ATTESTED SOURCE — NOT INDEPENDENTLY VERIFIED';
+
+    const detectedTradingDates = Array.from(
+      new Set(parseResult.validRecords.map(r => r.date))
+    ).sort();
+
+    const unsupportedInstrumentCount = parseResult.rejectedRows.filter(
+      r => r.reason.includes('Non-futures instrument') || r.reason.includes('Option contract')
+    ).length;
+    const otherRejectedCount = parseResult.rejectedRows.length - unsupportedInstrumentCount;
+
+    if (!isAccumulating) {
+      const mergeAnalysis: MergeAnalysis = {
+        sourceFilename: filename,
+        detectedTradingDates,
+        validFuturesInSource: parseResult.validRecords.length,
+        newlyInsertedCount: parseResult.validRecords.length,
+        unchangedDuplicatesCount: 0,
+        conflictingCount: 0,
+        conflictingObservations: [],
+        unsupportedInstrumentCount,
+        otherRejectedCount,
+        projectedTotalRecords: parseResult.validRecords.length,
+        projectedDateRange: parseResult.metadata.dateRange,
+        isAccumulating: false
+      };
+      parseResult.mergeAnalysis = mergeAnalysis;
+      return { parseResult, mergeAnalysis };
+    }
+
+    // Comparing against active imported dataset
+    const existingMap = new Map<string, MarketObservation>();
+    for (const obs of this.localObservations) {
+      existingMap.set(`${obs.symbol}_${obs.date}_${obs.expiryDate}`, obs);
+    }
+
+    let newlyInsertedCount = 0;
+    let unchangedDuplicatesCount = 0;
+    const conflictingObservations: MergeConflictDetail[] = [];
+
+    for (const inc of parseResult.validRecords) {
+      const key = `${inc.symbol}_${inc.date}_${inc.expiryDate}`;
+      const ext = existingMap.get(key);
+      if (!ext) {
+        newlyInsertedCount++;
+      } else {
+        const isCloseDiff = Math.abs(ext.close - inc.close) > 0.01;
+        const isOpenDiff = Math.abs(ext.open - inc.open) > 0.01;
+        const isHighDiff = Math.abs(ext.high - inc.high) > 0.01;
+        const isLowDiff = Math.abs(ext.low - inc.low) > 0.01;
+        const isVolDiff = ext.volume !== inc.volume;
+        const isOIDiff = ext.openInterest !== inc.openInterest;
+
+        if (isCloseDiff || isOpenDiff || isHighDiff || isLowDiff || isVolDiff || isOIDiff) {
+          const diffs: string[] = [];
+          if (isCloseDiff) diffs.push(`Close ₹${ext.close} vs ₹${inc.close}`);
+          if (isOpenDiff) diffs.push(`Open ₹${ext.open} vs ₹${inc.open}`);
+          if (isHighDiff) diffs.push(`High ₹${ext.high} vs ₹${inc.high}`);
+          if (isLowDiff) diffs.push(`Low ₹${ext.low} vs ₹${inc.low}`);
+          if (isVolDiff) diffs.push(`Vol ${ext.volume} vs ${inc.volume}`);
+          if (isOIDiff) diffs.push(`OI ${ext.openInterest} vs ${inc.openInterest}`);
+
+          conflictingObservations.push({
+            symbol: inc.symbol,
+            date: inc.date,
+            expiryDate: inc.expiryDate,
+            existingClose: ext.close,
+            incomingClose: inc.close,
+            difference: diffs.join(', ')
+          });
+        } else {
+          unchangedDuplicatesCount++;
+        }
+      }
+    }
+
+    const allProjectedDates = Array.from(
+      new Set([...this.localObservations.map(o => o.date), ...detectedTradingDates])
+    ).sort();
+
+    const mergeAnalysis: MergeAnalysis = {
+      sourceFilename: filename,
+      detectedTradingDates,
+      validFuturesInSource: parseResult.validRecords.length,
+      newlyInsertedCount,
+      unchangedDuplicatesCount,
+      conflictingCount: conflictingObservations.length,
+      conflictingObservations,
+      unsupportedInstrumentCount,
+      otherRejectedCount,
+      projectedTotalRecords: this.localObservations.length + newlyInsertedCount,
+      projectedDateRange: {
+        start: allProjectedDates[0] || 'N/A',
+        end: allProjectedDates[allProjectedDates.length - 1] || 'N/A'
+      },
+      isAccumulating: true
+    };
+
+    parseResult.mergeAnalysis = mergeAnalysis;
+    return { parseResult, mergeAnalysis };
+  }
+
+  /**
    * Imports custom user Bhavcopy CSV dataset.
-   * Defaults strictly to 'USER-IMPORTED DATA — SOURCE UNVERIFIED'.
+   * Deterministically merges compatible trading dates into the active imported historical dataset.
+   * Prevents silent overwriting of conflicting observations.
    */
   public async importFromCsvAsync(
     csvContent: string,
     filename = 'user_upload.csv',
-    customMapping?: Partial<ColumnMapping>
+    customMapping?: Partial<ColumnMapping>,
+    forceReplace = false
   ): Promise<ParseResult> {
     const hash = await computeFileSha256(csvContent);
-    const provenance: DataProvenance = 'USER-IMPORTED DATA — SOURCE UNVERIFIED';
-
-    const result = parseBhavcopyCsv(
+    const { parseResult, mergeAnalysis } = this.analyzeImportMerge(
       csvContent,
       filename,
-      provenance,
       customMapping,
       hash
     );
 
-    if (result.validRecords.length === 0) {
-      throw new Error(`Import failed: 0 valid records parsed. ${result.rejectedRows.length} rows were rejected.`);
+    if (parseResult.validRecords.length === 0) {
+      throw new Error(`Import failed: 0 valid records parsed. ${parseResult.rejectedRows.length} rows were rejected.`);
     }
 
-    result.metadata.isUserAttested = false;
-    result.metadata.isVerified = false;
+    if (mergeAnalysis.conflictingCount > 0 && !forceReplace) {
+      throw new Error(
+        `Import conflict: Detected ${mergeAnalysis.conflictingCount} conflicting observation(s) on existing contract dates. ` +
+        `Conflicting records: [${mergeAnalysis.conflictingObservations.map(c => `${c.symbol} ${c.date} (${c.difference})`).join('; ')}]. ` +
+        `Silent overwriting is prevented. Resolve source file or choose explicit replacement.`
+      );
+    }
 
-    this.localObservations = result.validRecords;
-    this.provenance = provenance;
-    this.metadata = result.metadata;
-    this.saveToLocalStorage();
-    this.emitChange();
-
-    return result;
+    this.applyMerge(parseResult, mergeAnalysis, filename, hash, forceReplace);
+    return parseResult;
   }
 
   /**
@@ -369,31 +541,112 @@ class MarketDataService {
   public importFromCsv(
     csvContent: string,
     filename = 'user_upload.csv',
-    customMapping?: Partial<ColumnMapping>
+    customMapping?: Partial<ColumnMapping>,
+    forceReplace = false
   ): ParseResult {
-    const provenance: DataProvenance = 'USER-IMPORTED DATA — SOURCE UNVERIFIED';
-
-    const result = parseBhavcopyCsv(
+    const hash = computeQuickHash(csvContent);
+    const { parseResult, mergeAnalysis } = this.analyzeImportMerge(
       csvContent,
       filename,
-      provenance,
-      customMapping
+      customMapping,
+      hash
     );
 
-    if (result.validRecords.length === 0) {
-      throw new Error(`Import failed: 0 valid records parsed. ${result.rejectedRows.length} rows were rejected.`);
+    if (parseResult.validRecords.length === 0) {
+      throw new Error(`Import failed: 0 valid records parsed. ${parseResult.rejectedRows.length} rows were rejected.`);
     }
 
-    result.metadata.isUserAttested = false;
-    result.metadata.isVerified = false;
+    if (mergeAnalysis.conflictingCount > 0 && !forceReplace) {
+      throw new Error(
+        `Import conflict: Detected ${mergeAnalysis.conflictingCount} conflicting observation(s) on existing contract dates. ` +
+        `Conflicting records: [${mergeAnalysis.conflictingObservations.map(c => `${c.symbol} ${c.date} (${c.difference})`).join('; ')}]. ` +
+        `Silent overwriting is prevented. Resolve source file or choose explicit replacement.`
+      );
+    }
 
-    this.localObservations = result.validRecords;
-    this.provenance = provenance;
-    this.metadata = result.metadata;
+    this.applyMerge(parseResult, mergeAnalysis, filename, hash, forceReplace);
+    return parseResult;
+  }
+
+  private applyMerge(
+    parseResult: ParseResult,
+    mergeAnalysis: MergeAnalysis,
+    filename: string,
+    fileHash: string,
+    forceReplace: boolean
+  ): void {
+    if (forceReplace || !mergeAnalysis.isAccumulating) {
+      // Initialize or replace imported historical dataset
+      const validRecords = [...parseResult.validRecords].sort((a, b) => a.date.localeCompare(b.date));
+      this.localObservations = validRecords;
+      this.provenance = 'USER-IMPORTED DATA — SOURCE UNVERIFIED';
+
+      const sourceFileEntry: ImportedSourceFileMetadata = {
+        filename,
+        fileHashSha256: fileHash,
+        dateRange: parseResult.metadata.dateRange,
+        validRows: validRecords.length,
+        importTimestamp: new Date().toISOString()
+      };
+
+      this.metadata = {
+        ...parseResult.metadata,
+        provenance: this.provenance,
+        sourceFiles: [sourceFileEntry],
+        isUserAttested: false,
+        isVerified: false
+      };
+    } else {
+      // Accumulate genuinely new observations into existing imported historical dataset
+      const existingKeys = new Set(this.localObservations.map(o => `${o.symbol}_${o.date}_${o.expiryDate}`));
+      const newRecords = parseResult.validRecords.filter(
+        o => !existingKeys.has(`${o.symbol}_${o.date}_${o.expiryDate}`)
+      );
+
+      const mergedRecords = [...this.localObservations, ...newRecords].sort((a, b) =>
+        a.date.localeCompare(b.date)
+      );
+
+      const existingFiles = this.metadata.sourceFiles || [];
+      const alreadyHasHash = existingFiles.some(f => f.fileHashSha256 === fileHash);
+      const updatedFiles: ImportedSourceFileMetadata[] = alreadyHasHash
+        ? existingFiles
+        : [
+            ...existingFiles,
+            {
+              filename,
+              fileHashSha256: fileHash,
+              dateRange: parseResult.metadata.dateRange,
+              validRows: parseResult.validRecords.length,
+              importTimestamp: new Date().toISOString()
+            }
+          ];
+
+      const allDates = Array.from(new Set(mergedRecords.map(o => o.date))).sort();
+      const updatedCoverage = this.recalculateCoverage(mergedRecords);
+
+      this.localObservations = mergedRecords;
+      this.metadata = {
+        ...this.metadata,
+        filename: updatedFiles.map(f => f.filename).join(', '),
+        validRows: mergedRecords.length,
+        totalRows: (this.metadata.totalRows || 0) + parseResult.metadata.totalRows,
+        rejectedRows: (this.metadata.rejectedRows || 0) + parseResult.metadata.rejectedRows,
+        duplicateCount: (this.metadata.duplicateCount || 0) + mergeAnalysis.unchangedDuplicatesCount,
+        dateRange: {
+          start: allDates[0] || 'N/A',
+          end: allDates[allDates.length - 1] || 'N/A'
+        },
+        contractCoverage: updatedCoverage,
+        sourceFiles: updatedFiles
+      };
+    }
+
     this.saveToLocalStorage();
     this.emitChange();
 
-    return result;
+    parseResult.metadata = this.metadata;
+    parseResult.mergeAnalysis = mergeAnalysis;
   }
 
   /**

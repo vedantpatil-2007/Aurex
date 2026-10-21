@@ -114,7 +114,7 @@ export function runWalkForwardBacktest(
 
       // Check current spread and prices
       const currentSpread = current.spread;
-      const spreadDiff = openTrade.direction === 'LONG_SPREAD'
+      const _spreadDiff = openTrade.direction === 'LONG_SPREAD'
         ? currentSpread - openTrade.entrySpread
         : openTrade.entrySpread - currentSpread;
 
@@ -176,24 +176,41 @@ export function runWalkForwardBacktest(
         openTrade.status = 'CLOSED';
         openTrade.exitReason = exitReason;
 
+        // Leg-level price changes
+        const priceChangeA = current.priceA - openTrade.entryPriceA;
+        const priceChangeB = current.priceB - openTrade.entryPriceB;
+
+        // Long spread: Buy Leg A, Sell Leg B
+        // Short spread: Sell Leg A, Buy Leg B
+        const dirSignA = openTrade.direction === 'LONG_SPREAD' ? 1 : -1;
+        const dirSignB = openTrade.direction === 'LONG_SPREAD' ? -1 : 1;
+
+        // Independent leg-by-leg gross P&L calculation (for 100g = 10 units of 10g)
+        const legAPnL = Number((dirSignA * priceChangeA * unitsOf10g).toFixed(2));
+        const legBPnL = Number((dirSignB * priceChangeB * unitsOf10g).toFixed(2));
+        openTrade.legAPnL = legAPnL;
+        openTrade.legBPnL = legBPnL;
+
+        // Gross Realized P&L derived strictly from trade legs: PnL_LegA + PnL_LegB
+        openTrade.grossPnL = Number((legAPnL + legBPnL).toFixed(2));
+
         // Exit transaction costs (slippage + brokerage on closing legs)
         openTrade.exitFriction = Number((frictionPer10g * unitsOf10g).toFixed(2));
         openTrade.totalFriction = Number((openTrade.entryFriction + openTrade.exitFriction).toFixed(2));
 
-        // Gross P&L on 100g physical spread: (spread change per 10g) * 10
-        openTrade.grossPnL = Number((spreadDiff * unitsOf10g).toFixed(2));
+        // Net Realized P&L: Gross Realized P&L minus Total Friction
         openTrade.netPnL = Number((openTrade.grossPnL - openTrade.totalFriction).toFixed(2));
 
-        // Attribution: Market Beta vs Relative-Value Alpha
-        const priceChangeA = current.priceA - openTrade.entryPriceA;
-        const priceChangeB = current.priceB - openTrade.entryPriceB;
-        const _avgMarketShift = (priceChangeA + priceChangeB) / 2; // general gold market drift
+        // Economic Attribution:
+        // Broad underlying gold price shift (mean benchmark change across both legs)
+        const benchmarkGoldShift = (priceChangeA + priceChangeB) / 2;
+        // Directional market tilt: unhedged physical exposure units (0 when matched 1:1)
+        const netExposureUnits = (dirSignA + dirSignB) * unitsOf10g;
+        const goldMarketBetaPnL = Number((netExposureUnits * benchmarkGoldShift).toFixed(2));
 
-        // Spread Alpha is the gross convergence profit
-        const relativeValueAlphaPnL = openTrade.grossPnL;
-        // Beta is the net directional market tilt (near zero when matched)
-        const goldMarketBetaPnL = 0; // Hedged 1:1 on physical gold basis
-        const residualPnL = Number((openTrade.netPnL - (relativeValueAlphaPnL - openTrade.totalFriction)).toFixed(2));
+        // Relative-Value Spread Alpha: gross convergence profit minus any unhedged directional beta
+        const relativeValueAlphaPnL = Number((openTrade.grossPnL - goldMarketBetaPnL).toFixed(2));
+        const residualPnL = Number((openTrade.grossPnL - (goldMarketBetaPnL + relativeValueAlphaPnL)).toFixed(2));
 
         openTrade.attribution = {
           goldMarketBetaPnL,

@@ -34,7 +34,8 @@ export interface NormalizedObservation extends MarketObservation {
   normalizedPrice: number;   // Price normalized to ₹ / 10g @ 999 purity
   unitAdjustment: number;    // (10 / quoteUnitGrams)
   purityAdjustment: number;  // (999 / purityPermille)
-  daysToExpiry: number;
+  daysToExpiry: number;      // Calendar days to expiry
+  tradingDaysToExpiry?: number; // Trading days to expiry (excluding weekends & MCX holidays)
   lifecycleStage: ContractLifecycleStage;
 }
 
@@ -149,6 +150,38 @@ export interface ContractCoverageItem {
   expiries: string[];
 }
 
+export interface ImportedSourceFileMetadata {
+  filename: string;
+  fileHashSha256: string;
+  dateRange: { start: string; end: string };
+  validRows: number;
+  importTimestamp: string;
+}
+
+export interface MergeConflictDetail {
+  symbol: ContractSymbol;
+  date: string;
+  expiryDate: string;
+  existingClose: number;
+  incomingClose: number;
+  difference: string;
+}
+
+export interface MergeAnalysis {
+  sourceFilename: string;
+  detectedTradingDates: string[];
+  validFuturesInSource: number;
+  newlyInsertedCount: number;
+  unchangedDuplicatesCount: number;
+  conflictingCount: number;
+  conflictingObservations: MergeConflictDetail[];
+  unsupportedInstrumentCount: number;
+  otherRejectedCount: number;
+  projectedTotalRecords: number;
+  projectedDateRange: { start: string; end: string };
+  isAccumulating: boolean;
+}
+
 export interface DatasetMetadata {
   provenance: DataProvenance;
   filename?: string;
@@ -163,6 +196,7 @@ export interface DatasetMetadata {
   missingFieldCount: number;
   dateRange: { start: string; end: string };
   contractCoverage: Record<ContractSymbol, ContractCoverageItem>;
+  sourceFiles?: ImportedSourceFileMetadata[];
   knownLimitations: string[];
   sourceClassification: string;
   isUserAttested?: boolean;
@@ -293,7 +327,10 @@ export interface FuturesCurve {
   spreadNearFarPct?: number;
   daysBetweenExpiries?: number;
   annualizedSimpleCarry?: number;
-  annualizedCompoundedCarry?: number;
+  annualizedContinuousCarry?: number;
+  annualizedCompoundedCarry?: number; // Kept as alias for annualizedContinuousCarry
+  annualizedGeometricCarry?: number;  // 100 * ((Far/Near)^(365/ΔD) - 1)
+  carryCalculationStatus?: 'VALID' | 'EQUAL_EXPIRIES' | 'INSUFFICIENT_EXPIRIES' | 'INVALID_PRICES';
 }
 
 export interface ConstantMaturityReference {
@@ -350,6 +387,8 @@ export interface BacktestTrade {
   lotQuantityA: number;
   lotQuantityB: number;
   normalizedGrams: number;
+  legAPnL?: number;
+  legBPnL?: number;
   grossPnL: number;
   entryFriction: number;
   exitFriction: number;
@@ -428,7 +467,8 @@ export interface LifecycleEligibilityCheck {
   symbol: ContractSymbol;
   date: string;
   expiryDate: string;
-  daysToExpiry: number;
+  daysToExpiry: number;            // Calendar days to expiry
+  tradingDaysToExpiry?: number;    // Business/trading days excluding weekends & MCX holidays
   lifecycleStage: ContractLifecycleStage;
   isEligibleForNewEntry: boolean;
   mustForcedExit: boolean;

@@ -5,7 +5,7 @@ import {
   ContractSymbol
 } from '../types/market';
 import { marketDataService } from '../services/marketDataService';
-import { parseBhavcopyCsv, ParseResult, ColumnMapping } from '../services/csvParserService';
+import { ParseResult, ColumnMapping } from '../services/csvParserService';
 import { SAMPLE_MCX_BHAVCOPY_CSV } from '../data/sampleOfficialBhavcopy';
 import {
   Database,
@@ -65,9 +65,9 @@ export const DataLab: React.FC<DataLabProps> = ({
       const text = event.target?.result as string;
       setCsvRawText(text);
       try {
-        const preview = parseBhavcopyCsv(text, file.name, 'USER-IMPORTED DATA — SOURCE UNVERIFIED');
-        setParsePreview(preview);
-        setCustomMapping(preview.columnMapping);
+        const { parseResult } = marketDataService.analyzeImportMerge(text, file.name);
+        setParsePreview(parseResult);
+        setCustomMapping(parseResult.columnMapping);
         setActiveTab('preview');
       } catch (err: any) {
         setParseError(err.message || 'Failed to parse CSV file.');
@@ -108,13 +108,14 @@ export const DataLab: React.FC<DataLabProps> = ({
   };
 
   // Confirm and commit uploaded dataset into active memory & local storage
-  const handleConfirmImport = () => {
+  const handleConfirmImport = (forceReplace = false) => {
     if (!csvRawText) return;
     try {
       marketDataService.importFromCsv(
         csvRawText,
         selectedFile ? selectedFile.name : 'imported_bhavcopy.csv',
-        customMapping
+        customMapping,
+        forceReplace
       );
       onDatasetChanged();
       setActiveTab('current');
@@ -465,7 +466,7 @@ export const DataLab: React.FC<DataLabProps> = ({
               <li>Under <strong>Commodity</strong>, select <span className="text-slate-900 font-bold">BULLION / GOLD</span>.</li>
               <li>Select your trade date or date range and click <span className="text-slate-900 font-bold">Show</span>.</li>
               <li>Click <span className="text-slate-900 font-bold">Export to CSV</span> to download the authentic MCX Bhavcopy file to your computer.</li>
-              <li>Drag and drop the downloaded file into the upload zone above. AUREX handles all date formats, cleans whitespace, quarantines corrupted OHLC records, normalizes quotes to 10g 995 fineness, and stores the records locally in your browser.</li>
+              <li>Drag and drop the downloaded file into the upload zone above. AUREX handles all date formats, cleans whitespace, quarantines corrupted OHLC records, normalizes supported contract quotes to a ₹/10 g at 999-purity comparison basis, and stores the records locally in your browser.</li>
             </ol>
           </div>
         </div>
@@ -528,12 +529,12 @@ export const DataLab: React.FC<DataLabProps> = ({
       {activeTab === 'current' && (
         <div className="space-y-4">
           <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-            <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+            <div className="p-4 bg-slate-50 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-slate-700">
                 Discrete Contract Coverage Matrix
               </h3>
               <span className="text-[11px] font-mono text-slate-500">
-                Total Rows: {metadata.totalRows} | Valid: {metadata.validRows} | Duplicates: {metadata.duplicateCount}
+                Total Rows: {metadata.totalRows} | Valid: {metadata.validRows} | Dates: {marketDataService.getAvailableDates().length} | Files: {metadata.sourceFiles ? metadata.sourceFiles.length : 1} | Duplicates: {metadata.duplicateCount}
               </span>
             </div>
 
@@ -584,6 +585,49 @@ export const DataLab: React.FC<DataLabProps> = ({
               </table>
             </div>
           </div>
+
+          {/* Multi-File Provenance Accumulation Card */}
+          {metadata.sourceFiles && metadata.sourceFiles.length > 0 && (
+            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+              <div className="p-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+                <span className="text-xs font-mono font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                  <Database className="w-3.5 h-3.5 text-slate-600" />
+                  Historical Source Files ({metadata.sourceFiles.length} Ingested Bhavcopy Files)
+                </span>
+                <span className="text-[11px] font-mono text-slate-500">
+                  {marketDataService.getAvailableDates().length} Distinct Trading Dates
+                </span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs font-mono">
+                  <thead className="bg-slate-100 text-slate-700 uppercase text-[10px] border-b border-slate-200">
+                    <tr>
+                      <th className="py-2 px-3">File Name</th>
+                      <th className="py-2 px-3">Trading Dates</th>
+                      <th className="py-2 px-3">Valid Observations</th>
+                      <th className="py-2 px-3">SHA-256 Digest</th>
+                      <th className="py-2 px-3">Ingested At</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-slate-800">
+                    {metadata.sourceFiles.map((f, idx) => (
+                      <tr key={idx} className="hover:bg-slate-50">
+                        <td className="py-2 px-3 font-bold text-slate-900">{f.filename}</td>
+                        <td className="py-2 px-3 text-slate-700">{f.dateRange.start} → {f.dateRange.end}</td>
+                        <td className="py-2 px-3 font-semibold text-emerald-700">{f.validRows} rows</td>
+                        <td className="py-2 px-3 text-slate-500 text-[11px] font-mono" title={f.fileHashSha256}>
+                          {f.fileHashSha256.slice(0, 16)}...
+                        </td>
+                        <td className="py-2 px-3 text-slate-500 text-[11px]">
+                          {f.importTimestamp ? f.importTimestamp.slice(0, 19).replace('T', ' ') : 'N/A'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           {/* Known Data Limitations Panel */}
           <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
@@ -650,19 +694,131 @@ export const DataLab: React.FC<DataLabProps> = ({
                 Ready to Import: {parsePreview.metadata.validRows} Valid Records
               </h3>
               <p className="text-xs text-slate-500">
-                File: {parsePreview.metadata.filename} â€¢ Rejected: {parsePreview.metadata.rejectedRows} rows
+                File: {parsePreview.metadata.filename} • Rejected: {parsePreview.metadata.rejectedRows} rows
               </p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <button
-                onClick={handleConfirmImport}
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs transition-colors shadow-sm font-mono flex items-center gap-1.5"
+                disabled={parsePreview.mergeAnalysis && parsePreview.mergeAnalysis.conflictingCount > 0}
+                onClick={() => handleConfirmImport(false)}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white font-bold rounded-lg text-xs transition-colors shadow-sm font-mono flex items-center gap-1.5 cursor-pointer disabled:cursor-not-allowed"
               >
                 <CheckCircle2 className="w-3.5 h-3.5" />
-                <span>Confirm & Ingest Dataset</span>
+                <span>
+                  {parsePreview.mergeAnalysis?.isAccumulating
+                    ? `Confirm & Merge (+${parsePreview.mergeAnalysis.newlyInsertedCount} New Records)`
+                    : 'Confirm & Ingest Dataset'}
+                </span>
               </button>
+              {parsePreview.mergeAnalysis && parsePreview.mergeAnalysis.conflictingCount > 0 && (
+                <button
+                  onClick={() => handleConfirmImport(true)}
+                  className="px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-lg text-xs transition-colors shadow-sm font-mono cursor-pointer"
+                >
+                  Force Overwrite
+                </button>
+              )}
             </div>
           </div>
+
+          {/* Explicit Merge Summary Card */}
+          {parsePreview.mergeAnalysis && (
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3 font-mono text-xs">
+              <div className="flex items-center justify-between border-b border-slate-200 pb-2 flex-wrap gap-2">
+                <span className="font-bold text-slate-900 uppercase text-[11px] flex items-center gap-1.5">
+                  <Database className="w-4 h-4 text-amber-600" />
+                  Pre-Import Merge & Accumulation Analysis
+                </span>
+                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                  parsePreview.mergeAnalysis.isAccumulating ? 'bg-sky-100 text-sky-800' : 'bg-emerald-100 text-emerald-800'
+                }`}>
+                  {parsePreview.mergeAnalysis.isAccumulating ? 'ACCUMULATING INTO ACTIVE HISTORY' : 'INITIALIZING NEW HISTORICAL DATASET'}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-[11px]">
+                <div className="bg-white p-2.5 rounded border border-slate-200">
+                  <div className="text-slate-500 text-[10px]">SOURCE FILE</div>
+                  <div className="font-bold text-slate-900 truncate" title={parsePreview.mergeAnalysis.sourceFilename}>
+                    {parsePreview.mergeAnalysis.sourceFilename}
+                  </div>
+                </div>
+
+                <div className="bg-white p-2.5 rounded border border-slate-200">
+                  <div className="text-slate-500 text-[10px]">DETECTED DATES</div>
+                  <div className="font-bold text-slate-900 truncate" title={parsePreview.mergeAnalysis.detectedTradingDates.join(', ')}>
+                    {parsePreview.mergeAnalysis.detectedTradingDates.length > 0
+                      ? parsePreview.mergeAnalysis.detectedTradingDates.join(', ')
+                      : 'None'}
+                  </div>
+                </div>
+
+                <div className="bg-white p-2.5 rounded border border-slate-200">
+                  <div className="text-slate-500 text-[10px]">VALID FUTURES (FUTCOM)</div>
+                  <div className="font-bold text-emerald-700">
+                    {parsePreview.mergeAnalysis.validFuturesInSource} rows
+                  </div>
+                </div>
+
+                <div className="bg-white p-2.5 rounded border border-slate-200">
+                  <div className="text-slate-500 text-[10px]">NEWLY INSERTED</div>
+                  <div className="font-bold text-emerald-700">
+                    +{parsePreview.mergeAnalysis.newlyInsertedCount} rows
+                  </div>
+                </div>
+
+                <div className="bg-white p-2.5 rounded border border-slate-200">
+                  <div className="text-slate-500 text-[10px]">UNCHANGED DUPLICATES</div>
+                  <div className="font-bold text-slate-700">
+                    {parsePreview.mergeAnalysis.unchangedDuplicatesCount} rows
+                  </div>
+                </div>
+
+                <div className="bg-white p-2.5 rounded border border-slate-200">
+                  <div className="text-slate-500 text-[10px]">CONFLICTING RECORDS</div>
+                  <div className={`font-bold ${parsePreview.mergeAnalysis.conflictingCount > 0 ? 'text-rose-700' : 'text-slate-700'}`}>
+                    {parsePreview.mergeAnalysis.conflictingCount} rows
+                  </div>
+                </div>
+
+                <div className="bg-white p-2.5 rounded border border-slate-200">
+                  <div className="text-slate-500 text-[10px]">QUARANTINED OPTIONS</div>
+                  <div className="font-bold text-amber-700">
+                    {parsePreview.mergeAnalysis.unsupportedInstrumentCount} rows
+                  </div>
+                </div>
+
+                <div className="bg-white p-2.5 rounded border border-slate-200">
+                  <div className="text-slate-500 text-[10px]">PROJECTED DATASET SIZE</div>
+                  <div className="font-bold text-sky-800">
+                    {parsePreview.mergeAnalysis.projectedTotalRecords} total records
+                  </div>
+                </div>
+              </div>
+
+              {parsePreview.mergeAnalysis.conflictingCount > 0 && (
+                <div className="p-3 bg-rose-50 border border-rose-300 rounded-lg text-rose-900 text-xs space-y-1">
+                  <div className="font-bold flex items-center gap-1.5 text-rose-800">
+                    <AlertTriangle className="w-4 h-4 text-rose-600" />
+                    Conflict Detected: Data Divergence on Existing Expiries
+                  </div>
+                  <p className="text-[11px] leading-relaxed">
+                    {parsePreview.mergeAnalysis.conflictingCount} record(s) in this file match existing contract expiries but have conflicting settlement marks. Automatic import is blocked to prevent silent overwriting.
+                  </p>
+                  <div className="mt-2 text-[10px] bg-white p-2 rounded border border-rose-200 space-y-1">
+                    {parsePreview.mergeAnalysis.conflictingObservations.map((c, i) => (
+                      <div key={i}>{c.symbol} on {c.date} (Exp: {c.expiryDate}): {c.difference}</div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center justify-between text-[11px] text-slate-600 pt-1 border-t border-slate-200 flex-wrap gap-2">
+                <span>Resulting Date Range: <strong>{parsePreview.mergeAnalysis.projectedDateRange.start} → {parsePreview.mergeAnalysis.projectedDateRange.end}</strong></span>
+                <span>Provenance: <strong>USER-IMPORTED DATA — SOURCE UNVERIFIED</strong></span>
+              </div>
+            </div>
+          )}
 
           <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
             <div className="p-3 bg-slate-50 border-b border-slate-200 text-xs font-mono font-bold text-slate-700">
@@ -722,7 +878,7 @@ export const DataLab: React.FC<DataLabProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-800">
-                  {parsePreview.rejectedRows.map((rej, idx) => (
+                  {parsePreview.rejectedRows.slice(0, 100).map((rej, idx) => (
                     <tr key={idx} className="hover:bg-slate-50">
                       <td className="py-2 px-3 font-bold text-rose-700">Line {rej.rowNumber}</td>
                       <td className="py-2 px-3 text-rose-800">{rej.reason}</td>
@@ -734,6 +890,11 @@ export const DataLab: React.FC<DataLabProps> = ({
                 </tbody>
               </table>
             </div>
+            {parsePreview.rejectedRows.length > 100 && (
+              <div className="p-2.5 bg-slate-50 border-t border-slate-200 text-[11px] text-slate-500 font-mono text-center">
+                Showing first 100 of {parsePreview.rejectedRows.length.toLocaleString()} quarantined rows. All {parsePreview.rejectedRows.length.toLocaleString()} rows are preserved in parser metadata.
+              </div>
+            )}
           </div>
         </div>
       )}

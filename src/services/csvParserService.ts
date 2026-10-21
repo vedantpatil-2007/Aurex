@@ -3,7 +3,8 @@ import {
   MarketObservation,
   DatasetMetadata,
   RejectedRow,
-  DataProvenance
+  DataProvenance,
+  MergeAnalysis
 } from '../types/market';
 
 export interface ColumnMapping {
@@ -16,6 +17,9 @@ export interface ColumnMapping {
   closeCol: string;
   volumeCol: string;
   oiCol: string;
+  instrumentCol?: string;
+  optionTypeCol?: string;
+  strikePriceCol?: string;
 }
 
 export interface ParseResult {
@@ -24,6 +28,7 @@ export interface ParseResult {
   detectedColumns: string[];
   columnMapping: ColumnMapping;
   metadata: DatasetMetadata;
+  mergeAnalysis?: MergeAnalysis;
 }
 
 const SUPPORTED_SYMBOLS: Record<string, ContractSymbol> = {
@@ -224,14 +229,17 @@ export function detectColumnMapping(headers: string[]): ColumnMapping {
 
   return {
     dateCol: findBestCol(['TRADEDATE', 'DATE', 'TIMESTAMP', 'TDDATE', 'DATETIME']),
-    symbolCol: findBestCol(['SYMBOL', 'COMMODITY', 'INSTRUMENT', 'CONTRACT', 'COMMODITYNAME']),
+    symbolCol: findBestCol(['SYMBOL', 'COMMODITY', 'CONTRACT', 'COMMODITYNAME']),
     expiryCol: findBestCol(['EXPIRYDATE', 'EXPIRY', 'EXPDATE', 'CONTRACTEXPIRY', 'MATURITY']),
     openCol: findBestCol(['OPEN', 'OPENPRICE']),
     highCol: findBestCol(['HIGH', 'HIGHPRICE']),
     lowCol: findBestCol(['LOW', 'LOWPRICE']),
     closeCol: findBestCol(['CLOSE', 'CLOSEPRICE', 'SETTLEPRICE', 'SETTLEMENTPRICE', 'LTP']),
-    volumeCol: findBestCol(['VOLUME', 'VOL', 'VOLUMELOTS', 'TOTALQTYTRADED', 'QTY', 'TRADEDQTY']),
-    oiCol: findBestCol(['OPENINTEREST', 'OI', 'OPENINT', 'TOTALOI'])
+    volumeCol: findBestCol(['VOLUMELOTS', 'VOLUME', 'VOL', 'TOTALQTYTRADED', 'QTY', 'TRADEDQTY']),
+    oiCol: findBestCol(['OPENINTERESTLOTS', 'OPENINTEREST', 'OI', 'OPENINT', 'TOTALOI']),
+    instrumentCol: findBestCol(['INSTRUMENTNAME', 'INSTRUMENT', 'INSTNAME', 'INSTRUMENTTYPE']),
+    optionTypeCol: findBestCol(['OPTIONTYPE', 'OPTNNAME', 'OPTION', 'OPTTYPE']),
+    strikePriceCol: findBestCol(['STRIKEPRICE', 'STRIKEPR', 'STRIKE', 'STRIKEPRC'])
   };
 }
 
@@ -293,7 +301,10 @@ export function parseBhavcopyCsv(
     low: rawHeaders.indexOf(mapping.lowCol),
     close: rawHeaders.indexOf(mapping.closeCol),
     volume: rawHeaders.indexOf(mapping.volumeCol),
-    oi: rawHeaders.indexOf(mapping.oiCol)
+    oi: rawHeaders.indexOf(mapping.oiCol),
+    instrument: mapping.instrumentCol ? rawHeaders.indexOf(mapping.instrumentCol) : -1,
+    optionType: mapping.optionTypeCol ? rawHeaders.indexOf(mapping.optionTypeCol) : -1,
+    strikePrice: mapping.strikePriceCol ? rawHeaders.indexOf(mapping.strikePriceCol) : -1
   };
 
   const validRecords: MarketObservation[] = [];
@@ -330,6 +341,35 @@ export function parseBhavcopyCsv(
         rowNumber: lineIdx + 1,
         raw: rowObj,
         reason: `Unsupported or non-PS03 commodity symbol: '${rawSymbol}'. Only GOLDM, GOLDTEN, GOLDGUINEA, GOLDPETAL are tracked.`
+      });
+      continue;
+    }
+
+    // Quarantining Non-Futures Instruments and Options:
+    // In MCX bhavcopies:
+    // - Futures contracts: Instrument Name = 'FUTCOM', Option Type = '-' or empty, Strike Price = '0' or '-'
+    // - Options contracts: Instrument Name = 'OPTFUT', Option Type = 'CE'/'PE', Strike Price = 135500, etc.
+    const rawInstrument = headerIndices.instrument >= 0 ? (rawTokens[headerIndices.instrument] || '').trim().toUpperCase() : '';
+    const rawOptionType = headerIndices.optionType >= 0 ? (rawTokens[headerIndices.optionType] || '').trim().toUpperCase() : '';
+    const rawStrikePrice = headerIndices.strikePrice >= 0 ? (rawTokens[headerIndices.strikePrice] || '').replace(/,/g, '').trim() : '';
+
+    if (rawInstrument && rawInstrument !== 'FUTCOM' && rawInstrument !== 'FUT') {
+      rejectedRows.push({
+        rowNumber: lineIdx + 1,
+        raw: rowObj,
+        reason: `Non-futures instrument quarantined: Instrument Name is '${rawInstrument}'. AUREX tracks commodity futures (FUTCOM) only.`
+      });
+      continue;
+    }
+
+    const hasOptionType = rawOptionType && rawOptionType !== '-' && rawOptionType !== '' && rawOptionType !== 'XX' && rawOptionType !== 'NONE';
+    const hasStrikePrice = rawStrikePrice && !isNaN(Number(rawStrikePrice)) && Number(rawStrikePrice) > 0;
+
+    if (hasOptionType || hasStrikePrice) {
+      rejectedRows.push({
+        rowNumber: lineIdx + 1,
+        raw: rowObj,
+        reason: `Option contract quarantined: Option Type is '${rawOptionType || '-'}' with Strike Price '${rawStrikePrice || '0'}'. AUREX tracks commodity futures (FUTCOM) only.`
       });
       continue;
     }

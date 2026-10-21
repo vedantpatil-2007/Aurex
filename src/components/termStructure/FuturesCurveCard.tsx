@@ -182,17 +182,17 @@ export const FuturesCurveCard: React.FC<FuturesCurveCardProps> = ({
                 {curve.annualizedSimpleCarry !== undefined ? `${curve.annualizedSimpleCarry}% p.a.` : 'N/A'}
               </div>
               <div className="text-xs text-slate-500 font-mono">
-                Basis: 100 Ã— (Far/Near - 1) Ã— (365/Î”D)
+                Basis: 100 × (Far/Near - 1) × (365/ΔD)
               </div>
             </div>
 
             <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-1">
-              <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Compounded Implied Carry</div>
+              <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Continuously Compounded Carry</div>
               <div className="text-lg font-bold font-mono text-emerald-900">
                 {curve.annualizedCompoundedCarry !== undefined ? `${curve.annualizedCompoundedCarry}% p.a.` : 'N/A'}
               </div>
               <div className="text-xs text-slate-500 font-mono">
-                Basis: 100 Ã— (365/Î”D) Ã— ln(Far/Near)
+                Basis: 100 × ln(Far/Near) × (365/ΔD)
               </div>
             </div>
           </div>
