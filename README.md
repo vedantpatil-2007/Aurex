@@ -5,7 +5,7 @@
 [![Hackathon](https://img.shields.io/badge/Hackathon-Hack_in_Hills_'26-amber.svg)](https://hackinhills.com)
 [![Problem Statement](https://img.shields.io/badge/Track-PS03_Commodity_Derivatives_Intelligence-blue.svg)](https://mcxindia.com)
 [![Team](https://img.shields.io/badge/Team-LONEBYTE-slate.svg)](#team-lonebyte)
-[![Tests](https://img.shields.io/badge/Vitest-60%2F60_Passed-emerald.svg)](#testing--verification)
+[![Tests](https://img.shields.io/badge/Vitest-71%2F71_Passed-emerald.svg)](#testing--verification)
 [![TypeScript](https://img.shields.io/badge/TypeScript-Strict_Checked-blue.svg)](#tech-stack)
 [![Deployment](https://img.shields.io/badge/Live_Deployment-aurex--swart.vercel.app-emerald.svg)](https://aurex-swart.vercel.app)
 
@@ -46,12 +46,12 @@ Naively comparing raw settlement marks across these contracts produces false arb
 ┌────────────────────────────────────────────────────────────────────────┐
 │                        AUREX ANALYTICAL PIPELINE                       │
 └────────────────────────────────────────────────────────────────────────┘
- [ Official MCX Bhavcopy CSV / User Ingestion ]
+ [ User-Ingested Bhavcopy CSV / Prototype Simulation ]
             │
             ▼
  ┌───────────────────────────────────────┐
- │ Module 01: Sourcing & Provenance      │ ➔ Multi-format date parsing, OHLC inequality checks,
- └───────────────────────────────────────┘   client-side SHA-256 hashing, localStorage caching
+ │ Module 01: Sourcing & Provenance      │ ➔ Multi-format date parsing, OPTFUT option quarantine,
+ └───────────────────────────────────────┘   multi-date accumulation, SHA-256 fingerprinting, browser localStorage
             │
             ▼
  ┌───────────────────────────────────────┐
@@ -172,18 +172,24 @@ $$\text{Price}_{\text{norm}} = \text{Raw Close} \times \left(\frac{10}{\text{Quo
 
 ## 5. Data Provenance & Ingestion Safeguards
 
-AUREX maintains strict data provenance classifications across all views:
-1. **`PROTOTYPE SIMULATION`**: Calibrated deterministic simulation based on official MCX PS03 contract parameters and historical gold volatility.
-2. **`PROTOTYPE SAMPLE — UNVERIFIED SOURCING`**: Bundled illustrative dataset formatted to MCX Bhavcopy schema for prototype demonstration.
-3. **`USER-IMPORTED DATA — SOURCE UNVERIFIED`**: User-provided Bhavcopy CSV files ingested and validated for format and schema, but whose official origin has not been independently verified.
-4. **`USER-ATTESTED SOURCE — NOT INDEPENDENTLY VERIFIED`**: Ingested datasets where the user has recorded a source assertion. *Recording an attestation does not independently verify that the file originated from MCX.*
-5. **`OFFICIAL MCX DATA — SOURCE VERIFIED`**: Strictly reserved for independent, evidence-backed exchange verification.
+AUREX enforces an uncompromised, honest data provenance framework across all views, calculations, and backtests:
 
-### Akamai Edge Security & Ingestion Workflow
-- **Automated Scraping Block**: Direct automated background requests to `https://www.mcxindia.com/market-data/bhavcopy` return `HTTP 403 Forbidden` (`Server: AkamaiGHost`) due to exchange bot protection.
-- **Manual Ingestion Workflow**: AUREX provides a 30-second manual browser download guide in the Data Lab. Users download official Bhavcopy CSV files and upload them locally.
-- **Cryptographic Fingerprinting**: Computes client-side SHA-256 hashes via Web Crypto API.
-- **Browser Persistence**: Persists validated datasets across reloads using browser `localStorage` (`aurex_imported_dataset_v2`).
+1. **`PROTOTYPE SIMULATION`**: Calibrated deterministic simulation based on official MCX PS03 contract parameters and historical gold volatility. Disclosed clearly as synthetic demo data; must never be presented as genuine historical exchange observations.
+2. **`PROTOTYPE SAMPLE — UNVERIFIED SOURCING`**: Bundled 108-row illustrative dataset formatted to the MCX Bhavcopy schema for prototype demonstration and testing.
+3. **`USER-IMPORTED DATA — SOURCE UNVERIFIED`**: User-provided Bhavcopy CSV files ingested and validated for schema, date formats, and OHLC coherence. *A CSV imported by a user does NOT automatically become independently verified official data.*
+4. **`USER-ATTESTED SOURCE — NOT INDEPENDENTLY VERIFIED`**: Ingested datasets where the user has recorded a source assertion. *Recording an attestation is a user assertion and does NOT constitute independent official verification inside AUREX.*
+5. **`OFFICIAL MCX DATA — SOURCE VERIFIED`**: Strictly reserved for authenticated, cryptographically verified exchange settlement feeds where independent official source confirmation exists.
+
+### Key Data Integrity & Architecture Disclosures
+- **No Automatic Official Verification**: Manual download of a Bhavcopy file from `https://www.mcxindia.com/market-data/bhavcopy` provides real-world context, but uploading the CSV into AUREX does **not** independently verify that the file originated from MCX. AUREX operates without a trusted custodial verification authority; all user-uploaded datasets remain classified as `USER-IMPORTED DATA — SOURCE UNVERIFIED`.
+- **Client-Side Persistence Scope**: Validated market observations are stored locally in the user's browser via `localStorage` (`aurex_imported_dataset_v2`). Browser-local data does **not** automatically synchronize to another browser, device, or user. Clearing browser local storage cleanly reverts the active workspace to the deterministic prototype simulation.
+- **Provenance Transparency in Analytics**: All analytical modules—including Term Structure curves, Relative-Value Z-scores, Cost Waterfalls, Walk-Forward Backtesting, and Attribution—conspicuously display the active dataset's provenance classification and limitations. Backtest and ledger results must be evaluated in the context of their underlying dataset provenance.
+- **Akamai Edge Security Disclosure**: Multi Commodity Exchange of India (MCX) protects its market data portals using Akamai Edge Security / Bot Manager. Direct automated background requests (via `curl`, python `requests`, or headless scrapers) return `HTTP 403 Forbidden` (`Server: AkamaiGHost`). AUREX guides users through manual browser downloads to inspect real market data in the Data Lab.
+- **Deterministic Multi-Date Accumulation**: The import engine dynamically accumulates distinct trading dates into a continuous historical time series (e.g., sequentially importing 20-Oct and 21-Oct yields a multi-day dataset).
+- **Duplicate Idempotency**: Re-importing the same CSV or redundant date records is strictly idempotent—existing identical observations are detected via natural composite keys (`symbol_date_expiryDate`) and skipped without inflating observation counts.
+- **Conflict Prevention (Anti-Tamper)**: If an incoming file contains records with matching contract expiries but divergent settlement prices, AUREX halts ingestion, flags the conflicting fields, and prevents silent overwriting.
+- **Strict FUTCOM vs. OPTFUT Quarantining**: To eliminate false observations, the parser validates contract specification metadata, admitting genuine `FUTCOM` commodity futures while strictly quarantining `OPTFUT` options (identified via non-empty option types `CE`/`PE` or positive strike prices) without using arbitrary price heuristics.
+- **Client-Side Cryptographic Fingerprinting**: Computes SHA-256 digests via the Web Crypto API to ensure file traceability and verifiable checksum records.
 
 ---
 
@@ -193,8 +199,8 @@ AUREX maintains strict data provenance classifications across all views:
 - **Styling**: Tailwind CSS
 - **Visualization**: Recharts (Futures curves, Z-score bands, Drawdown underwater charts, Waterfall bridge)
 - **Icons**: Lucide React
-- **Test Framework**: Vitest (49 unit tests across 7 test suites)
-- **Linter**: oxlint (0 errors)
+- **Test Framework**: Vitest (71 unit tests across 8 test suites, 100% passing)
+- **Linter**: oxlint (0 errors, 103 non-blocking warnings)
 
 ---
 
@@ -220,10 +226,10 @@ Open [http://localhost:5173](http://localhost:5173) in your browser.
 
 ### Available Scripts
 ```bash
-# Run complete test suite (60 tests)
+# Run complete test suite (71 tests across 8 test suites)
 npm test
 
-# Run linter
+# Run linter (oxlint)
 npm run lint
 
 # Run production build (typecheck + minification)
@@ -237,18 +243,19 @@ npm run preview
 
 ## 8. Testing & Verification
 
-AUREX contains 60 automated unit tests across 7 test suites in `src/test/`:
+AUREX contains 71 automated unit tests across 8 test suites in `src/test/`:
 
 | Test Suite | Tests | Verification Scope |
 | :--- | :---: | :--- |
 | `src/test/engines.test.ts` | 17 | Normalization, spread calculation, z-score, cost waterfall, lifecycle stages, decision states |
 | `src/test/round2.test.ts` | 14 | Lot size vs quote unit separation, purity scaling, CSV tokenization, duplicate detection, rejection inspector, benchmark normalization |
+| `src/test/bhavcopyAudit.test.ts` | 11 | OPTFUT option quarantining without price thresholds, FUTCOM acceptance, multi-date accumulation, idempotency, conflict detection, demo separation, GOLDGUINEA 999 purity, authentic MCX multi-date integration |
 | `src/test/termStructure.test.ts` | 8 | Discrete expiry ordering, simple / continuous / geometric carry formulas, contango / backwardation, edge cases, roll-down decomposition identity |
 | `src/test/lifecycle.test.ts` | 8 | 5-trading-day tender window vs calendar days, MCX holiday calendar exclusion, weekend detection, GOLDTEN 2025 launch date check, expired contracts, pair eligibility |
-| `src/test/backtest.test.ts` | 4 | Zero look-ahead bias validation, full trade lifecycle, entry/exit cost deductions, portfolio accounting reconciliation |
 | `src/test/attribution.test.ts` | 6 | Leg-level derivations (Leg A + Leg B = Gross), net reconciliation, adverse spread with rising gold market, profitable convergence during gold crash, asymmetric exposure beta isolation, single friction accounting |
+| `src/test/backtest.test.ts` | 4 | Zero look-ahead bias validation, full trade lifecycle, entry/exit cost deductions, portfolio accounting reconciliation |
 | `src/test/alerts.test.ts` | 3 | Alert deduplication, state transition alerts, unread counter management |
-| **Total** | **60** | **100% Passed** |
+| **Total** | **71** | **100% Passed (8 Suites, 0 Failures)** |
 
 Execute the suite:
 ```bash
@@ -281,4 +288,4 @@ All views are fully responsive and verified across key device viewports:
 
 - **Live Order Book Depth**: Daily Bhavcopy data provides trade volumes and open interest as liquidity proxies. Tick-by-tick order book depth (L2/L3) requires direct exchange co-location or broker WebSocket API access.
 - **External Webhooks**: In a pure client-side SPA, direct external webhook firing would expose webhook URLs and authorization tokens in browser network traffic. External notifications require a dedicated authenticated backend relay proxy.
-- **Historical Data Automation**: Automated Bhavcopy downloads are protected by MCX's Akamai Edge Security; manual CSV upload remains the supported, source-verified ingestion pathway.
+- **Historical Data Ingestion & Provenance Scope**: Automated Bhavcopy downloads are blocked by MCX's Akamai Edge Security; manual browser download and local CSV upload is the supported user ingestion pathway. Ingested datasets are stored in browser `localStorage` and classified as `USER-IMPORTED DATA — SOURCE UNVERIFIED`. Manual upload does not constitute independent official exchange verification.
