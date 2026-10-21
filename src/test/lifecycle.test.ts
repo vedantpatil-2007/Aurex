@@ -111,4 +111,15 @@ describe('AUREX Contract Lifecycle & Eligibility Engine', () => {
     expect(pairRes.rejectionReason).toContain('GOLDTEN');
     expect(pairRes.rejectionReason).toContain('tender window');
   });
+
+  it('9. should safely reject contracts with missing or invalid expiry metadata without crashing', () => {
+    const resEmpty = evaluateLifecycleEligibility('GOLDM', '2026-10-20', '');
+    expect(resEmpty.isEligibleForNewEntry).toBe(false);
+    expect(resEmpty.mustForcedExit).toBe(true);
+    expect(resEmpty.rejectionReason).toContain('Missing or invalid expiry date');
+
+    const resInvalid = evaluateLifecycleEligibility('GOLDM', '2026-10-20', 'NOT-A-DATE');
+    expect(resInvalid.isEligibleForNewEntry).toBe(false);
+    expect(resInvalid.rejectionReason).toContain('Missing or invalid expiry date');
+  });
 });

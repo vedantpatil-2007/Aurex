@@ -193,4 +193,34 @@ describe('AUREX Performance Attribution & Accounting Engine', () => {
     expect(attr.netPnL).toBe(100);
     expect(attr.reconciled).toBe(true);
   });
+
+  it('7. should flag attribution as unavailable when inputs are missing, negative, or non-finite', () => {
+    const invalidAttr = decomposeTradeAttribution(
+      'LONG_SPREAD',
+      10,
+      10,
+      -74000, // Invalid negative entry price
+      74200,
+      74000,
+      74100,
+      500
+    );
+
+    expect(invalidAttr.reconciled).toBe(false);
+    expect(invalidAttr.attributionStatus).toBe('UNAVAILABLE');
+    expect(invalidAttr.error).toBeDefined();
+
+    const nanAttr = decomposeTradeAttribution(
+      'LONG_SPREAD',
+      NaN,
+      10,
+      74000,
+      74200,
+      74000,
+      74100,
+      500
+    );
+    expect(nanAttr.reconciled).toBe(false);
+    expect(nanAttr.attributionStatus).toBe('UNAVAILABLE');
+  });
 });

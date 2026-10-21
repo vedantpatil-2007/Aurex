@@ -4,7 +4,9 @@ import {
   AlertSeverity,
   DecisionResult,
   DatasetMetadata,
-  DataProvenance
+  DataProvenance,
+  ContractSymbol,
+  LifecycleEligibilityCheck
 } from '../types/market';
 
 /**
@@ -14,13 +16,14 @@ import {
  * - Signal generation and state transitions (ACTIONABLE, WATCH, NO TRADE)
  * - Edge degradation (spread falling below transaction cost hurdle)
  * - Contract lifecycle warnings (5-day tender window approach)
- * - Data health and unverified provenance warnings
+ * - Data health, quarantine counts, and unverified provenance warnings
  *
  * Features strict deduplication, timestamping, and rule-traceable triggers.
  */
 class AlertManager {
   private alerts: PlatformAlert[] = [];
   private seenAlertKeys: Set<string> = new Set();
+  private previousDecisions: Map<string, string> = new Map();
   private maxAlerts = 50;
 
   /**
@@ -31,8 +34,8 @@ class AlertManager {
     severity: AlertSeverity;
     title: string;
     message: string;
-    pair?: [any, any];
-    symbol?: any;
+    pair?: [ContractSymbol, ContractSymbol];
+    symbol?: ContractSymbol;
     triggerRule?: string;
     sourceProvenance?: DataProvenance;
   }): PlatformAlert | null {
@@ -66,13 +69,19 @@ class AlertManager {
   }
 
   /**
-   * Evaluates decision output and dataset metadata to generate platform alerts
+   * Evaluates decision output, dataset metadata, and optional lifecycle checks to generate platform alerts
    */
   public evaluateSystemAlerts(
     decision: DecisionResult,
-    metadata: DatasetMetadata
+    metadata: DatasetMetadata,
+    lifecycleContext?: {
+      legA?: LifecycleEligibilityCheck;
+      legB?: LifecycleEligibilityCheck;
+    }
   ): PlatformAlert[] {
     const generated: PlatformAlert[] = [];
+    const pairKey = decision.pair.join('/');
+    const prevDecision = this.previousDecisions.get(pairKey);
 
     // 1. Signal & Decision State Alert
     if (decision.decision === 'ACTIONABLE') {
@@ -99,7 +108,30 @@ class AlertManager {
       if (alt) generated.push(alt);
     }
 
-    // 2. Data Provenance & Health Alert
+    // 2. Signal Downgrade / Invalidation Detection
+    if (prevDecision === 'ACTIONABLE' && decision.decision !== 'ACTIONABLE') {
+      const alt = this.addAlert({
+        category: 'SIGNAL',
+        severity: 'WARNING',
+        title: `Signal Downgraded / Invalidated: ${decision.pair.join(' / ')}`,
+        message: `Previous actionable signal downgraded to ${decision.decision}. Net edge is now ₹${decision.netEdge}/10g. Immediate position review advised.`,
+        pair: decision.pair,
+        triggerRule: 'State Transition: ACTIONABLE -> ' + decision.decision,
+        sourceProvenance: metadata.provenance
+      });
+      if (alt) generated.push(alt);
+    }
+    this.previousDecisions.set(pairKey, decision.decision);
+
+    // 3. Contract Lifecycle Restriction Alerts
+    if (lifecycleContext?.legA) {
+      this.checkLifecycleAlert(lifecycleContext.legA, decision.pair, metadata.provenance, generated);
+    }
+    if (lifecycleContext?.legB) {
+      this.checkLifecycleAlert(lifecycleContext.legB, decision.pair, metadata.provenance, generated);
+    }
+
+    // 4. Data Provenance & Health Alert
     if (metadata.provenance === 'PROTOTYPE SAMPLE — UNVERIFIED SOURCING') {
       const alt = this.addAlert({
         category: 'DATA_HEALTH',
@@ -114,13 +146,59 @@ class AlertManager {
         category: 'DATA_HEALTH',
         severity: 'WARNING',
         title: 'User-Imported File (Unverified)',
-        message: `Dataset "${metadata.filename || 'import.csv'}" is user-imported and has not been verified by an official exchange authority.`,
+        message: `Dataset "${metadata.filename || 'import.csv'}" is user-imported and has not been independently verified by MCX.`,
         sourceProvenance: metadata.provenance
       });
       if (alt) generated.push(alt);
     }
 
+    // 5. Data Health Anomaly Alerts
+    if (metadata.totalRows === 0) {
+      const alt = this.addAlert({
+        category: 'DATA_HEALTH',
+        severity: 'CRITICAL',
+        title: 'Empty Market Dataset',
+        message: 'Active dataset contains 0 observations. Analytical calculations unavailable until data is ingested.',
+        sourceProvenance: metadata.provenance,
+        triggerRule: 'Health Check: Row Count === 0'
+      });
+      if (alt) generated.push(alt);
+    }
+
     return generated;
+  }
+
+  private checkLifecycleAlert(
+    leg: LifecycleEligibilityCheck,
+    pair: [ContractSymbol, ContractSymbol],
+    provenance: DataProvenance,
+    generated: PlatformAlert[]
+  ): void {
+    if (leg.lifecycleStage === 'ROLL_WINDOW') {
+      const alt = this.addAlert({
+        category: 'LIFECYCLE',
+        severity: 'CRITICAL',
+        title: `Delivery Tender Window Restriction: ${leg.symbol}`,
+        message: leg.rejectionReason || `Contract ${leg.symbol} is within MCX 5-trading-day compulsory delivery tender window. New positions barred.`,
+        symbol: leg.symbol,
+        pair,
+        triggerRule: 'MCX Compulsory Delivery Window (<= 5 Trading Days)',
+        sourceProvenance: provenance
+      });
+      if (alt) generated.push(alt);
+    } else if (leg.lifecycleStage === 'NEAR_EXPIRY') {
+      const alt = this.addAlert({
+        category: 'LIFECYCLE',
+        severity: 'WARNING',
+        title: `Contract Approaching Tender Window: ${leg.symbol}`,
+        message: `Contract ${leg.symbol} has ${leg.tradingDaysToExpiry} trading days remaining until expiry. Pre-tender liquidation window active.`,
+        symbol: leg.symbol,
+        pair,
+        triggerRule: 'Lifecycle Warning (6 to 10 Trading Days to Expiry)',
+        sourceProvenance: provenance
+      });
+      if (alt) generated.push(alt);
+    }
   }
 
   public getAlerts(): PlatformAlert[] {
@@ -143,6 +221,7 @@ class AlertManager {
   public clearAlerts(): void {
     this.alerts = [];
     this.seenAlertKeys.clear();
+    this.previousDecisions.clear();
   }
 }
 

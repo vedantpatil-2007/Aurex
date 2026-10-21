@@ -457,6 +457,9 @@ export const DataLab: React.FC<DataLabProps> = ({
             <strong>Why Automated Scrapers Fail:</strong> Multi Commodity Exchange of India (MCX) protects its market data portals using <strong>Akamai Edge Security / Bot Manager</strong>. Direct automated background requests (via <code className="font-mono bg-slate-200 px-1 py-0.5 rounded text-[11px]">curl</code>, python <code className="font-mono bg-slate-200 px-1 py-0.5 rounded text-[11px]">requests</code>, or headless browser automation) receive an immediate <strong className="text-rose-700 font-mono">HTTP 403 Forbidden (Server: AkamaiGHost)</strong> response without active human browser session cookies.
           </p>
           <div className="border-t border-slate-200 pt-2">
+            <div className="bg-amber-50/80 border border-amber-200 rounded p-2.5 mb-2.5 text-[11px] text-amber-950 font-mono">
+              <strong>Dataset Coverage Notice:</strong> Currently, 2 authentic trading dates (20-Oct & 21-Oct-2026, 48 observations across GOLDM, GOLDTEN, GOLDGUINEA, GOLDPETAL) are accessible and validated. Approaching the 60-session backtest target requires downloading the remaining daily CSVs from the MCX portal following the steps below. Distinct dates accumulate deterministically in browser storage without overwriting past history.
+            </div>
             <span className="font-bold text-slate-900 block font-mono text-[11px] uppercase mb-1">
               Manual Browser Download Instructions (30 Seconds):
             </span>
@@ -464,8 +467,8 @@ export const DataLab: React.FC<DataLabProps> = ({
               <li>Open <a href="https://www.mcxindia.com/market-data/bhavcopy" target="_blank" rel="noopener noreferrer" className="text-amber-700 underline font-semibold">https://www.mcxindia.com/market-data/bhavcopy</a> in your web browser.</li>
               <li>Under <strong>Market Type</strong>, select <span className="text-slate-900 font-bold">Futures</span>.</li>
               <li>Under <strong>Commodity</strong>, select <span className="text-slate-900 font-bold">BULLION / GOLD</span>.</li>
-              <li>Select your trade date or date range and click <span className="text-slate-900 font-bold">Show</span>.</li>
-              <li>Click <span className="text-slate-900 font-bold">Export to CSV</span> to download the authentic MCX Bhavcopy file to your computer.</li>
+              <li>Select your trade date in the date picker and click <span className="text-slate-900 font-bold">Show</span>. <span className="text-amber-800 font-semibold">(Important: Wait for the table rows to refresh before clicking CSV. Clicking the CSV icon without clicking Show re-exports the preloaded date under the selected date filename).</span></li>
+              <li>Click the <span className="text-slate-900 font-bold">CSV icon</span> to download the authentic MCX Bhavcopy file.</li>
               <li>Drag and drop the downloaded file into the upload zone above. AUREX handles all date formats, cleans whitespace, quarantines corrupted OHLC records, normalizes supported contract quotes to a ₹/10 g at 999-purity comparison basis, and stores the records locally in your browser.</li>
             </ol>
           </div>

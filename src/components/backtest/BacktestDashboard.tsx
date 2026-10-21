@@ -162,6 +162,26 @@ export const BacktestDashboard: React.FC<BacktestDashboardProps> = ({
         </div>
       </div>
 
+      {/* Sample Size Warning Banner & Execution Model */}
+      {backtestResult.dataSufficiencyWarning && (
+        <div className="bg-amber-50 border border-amber-300 rounded-xl p-4 flex items-start gap-3 text-xs shadow-xs">
+          <AlertTriangle className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <div className="font-bold font-mono text-amber-950">
+              Statistical Validation Caveat: Historical Sample Size Notice
+            </div>
+            <p className="text-amber-900 leading-relaxed">
+              {backtestResult.dataSufficiencyWarning}
+            </p>
+            {backtestResult.executionAssumption && (
+              <p className="text-[11px] font-mono text-amber-800 pt-0.5">
+                Execution Model: {backtestResult.executionAssumption}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* KPI Performance Metrics */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 font-mono">
         <div className="bg-white border border-slate-200 rounded-xl p-3.5 space-y-1 shadow-sm">

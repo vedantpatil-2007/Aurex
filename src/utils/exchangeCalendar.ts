@@ -31,19 +31,20 @@ export const OFFICIAL_MCX_HOLIDAYS_2025_2026: readonly string[] = [
   '2025-11-05', // Gurunanak Jayanti
   '2025-12-25', // Christmas
 
-  // 2026 Gazetted Holidays
+  // 2026 Gazetted Full-Day Trading Holidays (Both Morning and Evening Sessions Closed)
   '2026-01-26', // Republic Day
-  '2026-02-15', // Mahashivratri
+  '2026-02-15', // Mahashivratri (Sunday)
   '2026-03-04', // Holi
   '2026-03-20', // Id-Ul-Fitr
   '2026-04-03', // Good Friday
   '2026-04-14', // Dr. Baba Saheb Ambedkar Jayanti
   '2026-05-01', // Maharashtra Day
   '2026-05-27', // Bakri Id
-  '2026-08-15', // Independence Day
+  '2026-08-15', // Independence Day (Saturday)
   '2026-10-02', // Mahatma Gandhi Jayanti
-  '2026-10-20', // Dussehra
-  '2026-11-08', // Diwali Laxmi Pujan
+  // Note: On Dussehra (2026-10-20), MCX morning session is closed but the evening session
+  // is open for bullion futures trading; authentic Bhavcopy records exist for 20-Oct-2026.
+  '2026-11-08', // Diwali Laxmi Pujan (Sunday)
   '2026-11-24', // Gurunanak Jayanti
   '2026-12-25'  // Christmas
 ];

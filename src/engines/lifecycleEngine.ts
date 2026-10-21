@@ -27,6 +27,23 @@ export function evaluateLifecycleEligibility(
 ): LifecycleEligibilityCheck {
   const spec = CONTRACT_SPECIFICATIONS[symbol];
   const deliveryRules = CONTRACT_DELIVERY_RULES[symbol];
+
+  // Defensive validation for missing or invalid dates
+  if (!expiryDateStr || typeof expiryDateStr !== 'string' || expiryDateStr.trim() === '' || isNaN(Date.parse(expiryDateStr))) {
+    return {
+      symbol,
+      date: currentDateStr,
+      expiryDate: expiryDateStr || '',
+      daysToExpiry: 0,
+      tradingDaysToExpiry: 0,
+      lifecycleStage: 'ROLL_WINDOW',
+      isEligibleForNewEntry: false,
+      mustForcedExit: true,
+      warnings: [`Missing or invalid expiry date metadata for contract ${symbol}.`],
+      rejectionReason: `Missing or invalid expiry date metadata for contract ${symbol}. Trading rejected.`
+    };
+  }
+
   const daysToExpiry = calculateDaysToExpiry(currentDateStr, expiryDateStr);
   const tradingDays = calculateTradingDays(currentDateStr, expiryDateStr, customHolidays);
 

@@ -54,6 +54,13 @@ export function runWalkForwardBacktest(
     .filter(d => obsByDateB.has(d))
     .sort((a, b) => a.localeCompare(b));
 
+  let dataSufficiencyWarning: string | undefined = undefined;
+  if (commonDates.length < warmUpDays) {
+    dataSufficiencyWarning = `Sample size limitation: Only ${commonDates.length} contemporaneous trading session(s) available for pair ${pair.join('/')}, whereas statistical walk-forward calibration requires >= ${warmUpDays} warm-up sessions. Zero trades could be calibrated on this limited sample; meaningful statistical validation requires continuous historical coverage (target >= 60 sessions).`;
+  } else if (commonDates.length < 30) {
+    dataSufficiencyWarning = `Preliminary sample: Evaluated ${commonDates.length} trading sessions (${commonDates.length - warmUpDays} out-of-sample). Statistical power is limited; results represent illustrative model calibration rather than proven alpha.`;
+  }
+
   // Friction per 10g unit
   const frictionPer10g = calculateTotalFriction(friction);
 
@@ -365,6 +372,11 @@ export function runWalkForwardBacktest(
     avgTradePnL,
     dailyEquityCurve,
     trades,
-    attributionSummary
+    attributionSummary,
+    dataSufficiencyWarning,
+    totalAvailableDates: commonDates.length,
+    evaluatedDates: spreadSeries.length,
+    warmUpDates: warmUpDays,
+    executionAssumption: 'Simulated execution assumes daily settlement price fill with configured slippage model; settlement prices are not guaranteed executable order-book fills.'
   };
 }

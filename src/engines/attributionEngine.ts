@@ -57,8 +57,24 @@ export function buildPerformanceWaterfallBridge(
   return bridge;
 }
 
+export interface TradeAttributionResult {
+  legAPnL: number;
+  legBPnL: number;
+  grossPnL: number;
+  netPnL: number;
+  goldMarketBetaPnL: number;
+  relativeValueAlphaPnL: number;
+  relativeValueSpreadPnL: number;
+  residualPnL: number;
+  reconciled: boolean;
+  attributionStatus: 'EXACT_SPREAD_HEDGED' | 'PROVISIONAL_APPROXIMATION' | 'UNAVAILABLE';
+  isProvisional: boolean;
+  notes?: string;
+  error?: string;
+}
+
 /**
- * Decomposes trade performance into leg-level P&Ls, directional beta, and spread alpha.
+ * Decomposes trade performance into leg-level P&Ls, directional beta, and spread performance.
  *
  * Core Accounting & Economic Equations:
  * 1. Leg A P&L = Direction_A × (P_exit,A - P_entry,A) × Exposure_A
@@ -66,8 +82,17 @@ export function buildPerformanceWaterfallBridge(
  * 3. Gross P&L = Leg A P&L + Leg B P&L
  * 4. Net P&L = Gross P&L - Total Friction
  * 5. Broad Gold Beta P&L = Net_Exposure × ΔBenchmark_Gold
- * 6. Relative-Value Spread Alpha = Gross P&L - Beta P&L
- * 7. Residual P&L = Gross P&L - (Beta P&L + Alpha P&L) === 0.00
+ * 6. Relative-Value Spread P&L = Gross P&L - Beta P&L
+ * 7. Residual P&L = Gross P&L - (Beta P&L + Spread P&L) === 0.00
+ *
+ * Methodological Disclosures:
+ * - When exposures are perfectly matched (1:1 weight basis), Net Exposure = 0 and Beta P&L = 0.
+ *   The attribution is exact and unskewed by directional gold market drift.
+ * - When exposures are asymmetric, directional beta is estimated using the benchmark gold shift.
+ *   If external spot gold is not supplied, the arithmetic average of the two legs is used
+ *   as a provisional approximation, and flagged accordingly.
+ * - Remaining spread performance is categorized as Relative-Value Spread P&L; it represents
+ *   spread convergence or divergence, NOT guaranteed or independently proven alpha.
  */
 export function decomposeTradeAttribution(
   direction: 'LONG_SPREAD' | 'SHORT_SPREAD',
@@ -77,17 +102,35 @@ export function decomposeTradeAttribution(
   exitPriceA: number,
   entryPriceB: number,
   exitPriceB: number,
-  totalFriction: number
-): {
-  legAPnL: number;
-  legBPnL: number;
-  grossPnL: number;
-  netPnL: number;
-  goldMarketBetaPnL: number;
-  relativeValueAlphaPnL: number;
-  residualPnL: number;
-  reconciled: boolean;
-} {
+  totalFriction: number,
+  externalBenchmarkGoldShift?: number
+): TradeAttributionResult {
+  // Defensive validation against missing or non-finite inputs
+  if (
+    !isFinite(unitsOf10gA) || unitsOf10gA <= 0 ||
+    !isFinite(unitsOf10gB) || unitsOf10gB <= 0 ||
+    !isFinite(entryPriceA) || entryPriceA <= 0 ||
+    !isFinite(exitPriceA) || exitPriceA <= 0 ||
+    !isFinite(entryPriceB) || entryPriceB <= 0 ||
+    !isFinite(exitPriceB) || exitPriceB <= 0 ||
+    !isFinite(totalFriction) || totalFriction < 0
+  ) {
+    return {
+      legAPnL: 0,
+      legBPnL: 0,
+      grossPnL: 0,
+      netPnL: 0,
+      goldMarketBetaPnL: 0,
+      relativeValueAlphaPnL: 0,
+      relativeValueSpreadPnL: 0,
+      residualPnL: 0,
+      reconciled: false,
+      attributionStatus: 'UNAVAILABLE',
+      isProvisional: false,
+      error: 'Missing, non-finite, or invalid trade inputs prevented defensible attribution.'
+    };
+  }
+
   const dirSignA = direction === 'LONG_SPREAD' ? 1 : -1;
   const dirSignB = direction === 'LONG_SPREAD' ? -1 : 1;
 
@@ -102,11 +145,33 @@ export function decomposeTradeAttribution(
   const netPnL = Number((grossPnL - totalFriction).toFixed(2));
 
   // Economic Attribution:
-  const benchmarkGoldShift = (priceChangeA + priceChangeB) / 2;
   const netExposureUnits = (dirSignA * unitsOf10gA) + (dirSignB * unitsOf10gB);
-  const goldMarketBetaPnL = Number((netExposureUnits * benchmarkGoldShift).toFixed(2));
+  const isNetExposureZero = Math.abs(netExposureUnits) < 0.001;
 
+  let benchmarkGoldShift: number;
+  let attributionStatus: 'EXACT_SPREAD_HEDGED' | 'PROVISIONAL_APPROXIMATION' | 'UNAVAILABLE';
+  let isProvisional = false;
+  let notes = '';
+
+  if (isNetExposureZero) {
+    benchmarkGoldShift = 0;
+    attributionStatus = 'EXACT_SPREAD_HEDGED';
+    notes = 'Matched 1:1 physical exposure. Directional gold market beta is exactly zero.';
+  } else if (externalBenchmarkGoldShift !== undefined && isFinite(externalBenchmarkGoldShift)) {
+    benchmarkGoldShift = externalBenchmarkGoldShift;
+    attributionStatus = 'EXACT_SPREAD_HEDGED';
+    notes = 'Attribution calculated using supplied external benchmark gold shift.';
+  } else {
+    // Provisional estimate via arithmetic average of both contracts
+    benchmarkGoldShift = (priceChangeA + priceChangeB) / 2;
+    attributionStatus = 'PROVISIONAL_APPROXIMATION';
+    isProvisional = true;
+    notes = 'Asymmetric exposure without external benchmark; gold price drift approximated via average contract change.';
+  }
+
+  const goldMarketBetaPnL = Number((netExposureUnits * benchmarkGoldShift).toFixed(2));
   const relativeValueAlphaPnL = Number((grossPnL - goldMarketBetaPnL).toFixed(2));
+  const relativeValueSpreadPnL = relativeValueAlphaPnL;
   const residualPnL = Number((grossPnL - (goldMarketBetaPnL + relativeValueAlphaPnL)).toFixed(2));
 
   // Strict accounting reconciliation check
@@ -121,8 +186,12 @@ export function decomposeTradeAttribution(
     netPnL,
     goldMarketBetaPnL,
     relativeValueAlphaPnL,
+    relativeValueSpreadPnL,
     residualPnL,
-    reconciled: grossReconciles && netReconciles && attributionReconciles
+    reconciled: grossReconciles && netReconciles && attributionReconciles,
+    attributionStatus,
+    isProvisional,
+    notes
   };
 }
 

@@ -5,7 +5,7 @@
 [![Hackathon](https://img.shields.io/badge/Hackathon-Hack_in_Hills_'26-amber.svg)](https://hackinhills.com)
 [![Problem Statement](https://img.shields.io/badge/Track-PS03_Commodity_Derivatives_Intelligence-blue.svg)](https://mcxindia.com)
 [![Team](https://img.shields.io/badge/Team-LONEBYTE-slate.svg)](#team-lonebyte)
-[![Tests](https://img.shields.io/badge/Vitest-71%2F71_Passed-emerald.svg)](#testing--verification)
+[![Tests](https://img.shields.io/badge/Vitest-78%2F78_Passed-emerald.svg)](#testing--verification)
 [![TypeScript](https://img.shields.io/badge/TypeScript-Strict_Checked-blue.svg)](#tech-stack)
 [![Deployment](https://img.shields.io/badge/Live_Deployment-aurex--swart.vercel.app-emerald.svg)](https://aurex-swart.vercel.app)
 
@@ -180,6 +180,24 @@ AUREX enforces an uncompromised, honest data provenance framework across all vie
 4. **`USER-ATTESTED SOURCE — NOT INDEPENDENTLY VERIFIED`**: Ingested datasets where the user has recorded a source assertion. *Recording an attestation is a user assertion and does NOT constitute independent official verification inside AUREX.*
 5. **`OFFICIAL MCX DATA — SOURCE VERIFIED`**: Strictly reserved for authenticated, cryptographically verified exchange settlement feeds where independent official source confirmation exists.
 
+
+### Empirical MCX Bhavcopy Dataset Coverage & Verification Audit
+
+An empirical audit of actual files downloaded from the official MCX Bhavcopy portal (`https://www.mcxindia.com/market-data/bhavcopy`) was conducted:
+
+| Filename | File Size | SHA-256 Digest | Line Count | Trading Date | Supported Futures Rows | Option / Other Rows | Deduplication Status |
+| :--- | :---: | :--- | :---: | :---: | :---: | :---: | :--- |
+| `BhavCopyDateWise_20102026.csv` | 22.8 KB | `61774232ae2337bf94af47eb57edbfdd0a3f4268e2bc46265c51b901db8f88ad` | 169 | 20-Oct-2026 | 24 (6 per contract) | 144 non-gold futures | First authentic date |
+| `BhavCopyDateWise_22102026.csv` | 2.00 MB | `fede0baa182d4a34ffa09a1e4700b048172c04f362cba7926b6cb04cb7d6d3c5` | 16,237 | 21-Oct-2026 | 24 (6 per contract) | 16,212 (748 options + 15,464 other) | Second authentic date |
+| `BhavCopyDateWise_21102026.csv` | 2.00 MB | `fede0baa182d4a34ffa09a1e4700b048172c04f362cba7926b6cb04cb7d6d3c5` | 16,237 | 21-Oct-2026 | 24 | 16,212 | Identical duplicate of `22102026.csv` |
+| `BhavCopyDateWise_13102026.csv` | 2.00 MB | `fede0baa182d4a34ffa09a1e4700b048172c04f362cba7926b6cb04cb7d6d3c5` | 16,237 | 21-Oct-2026 | 24 | 16,212 | Redundant export of preloaded 21-Oct date |
+
+**Coverage & Integrity Findings**:
+1. **Authentic Coverage**: Exactly **2 distinct trading sessions** (20-Oct & 21-Oct-2026), yielding **48 valid historical futures observations** across the four contracts (`GOLDM`, `GOLDTEN`, `GOLDGUINEA`, `GOLDPETAL`) across 6 expiries.
+2. **Quarantine Verification**: 0 option rows leaked into the futures dataset; all 748 `OPTFUT` option records (including the suspicious ₹9,503.50 and ₹957.00 strike premia) were correctly quarantined.
+3. **Statistical Sample Size Caveat**: With 2 authentic trading dates, the walk-forward backtester (which requires $\ge 15$ warm-up sessions for rolling $\mu, \sigma$ calibration) explicitly returns **0 trades** and surfaces a **Sample Size Limitation Notice**. AUREX refuses to invent synthetic data or claim that 2 dates validate strategy profitability.
+4. **Target of 60 Sessions**: Accumulating the 60-session historical validation target requires downloading the remaining daily Bhavcopy CSV files from the MCX archive using the Data Lab instructions. The multi-date accumulator preserves all past dates deterministically in browser `localStorage`.
+
 ### Key Data Integrity & Architecture Disclosures
 - **No Automatic Official Verification**: Manual download of a Bhavcopy file from `https://www.mcxindia.com/market-data/bhavcopy` provides real-world context, but uploading the CSV into AUREX does **not** independently verify that the file originated from MCX. AUREX operates without a trusted custodial verification authority; all user-uploaded datasets remain classified as `USER-IMPORTED DATA — SOURCE UNVERIFIED`.
 - **Client-Side Persistence Scope**: Validated market observations are stored locally in the user's browser via `localStorage` (`aurex_imported_dataset_v2`). Browser-local data does **not** automatically synchronize to another browser, device, or user. Clearing browser local storage cleanly reverts the active workspace to the deterministic prototype simulation.
@@ -243,7 +261,7 @@ npm run preview
 
 ## 8. Testing & Verification
 
-AUREX contains 71 automated unit tests across 8 test suites in `src/test/`:
+AUREX contains 78 automated unit tests across 8 test suites in `src/test/`:
 
 | Test Suite | Tests | Verification Scope |
 | :--- | :---: | :--- |
@@ -251,11 +269,11 @@ AUREX contains 71 automated unit tests across 8 test suites in `src/test/`:
 | `src/test/round2.test.ts` | 14 | Lot size vs quote unit separation, purity scaling, CSV tokenization, duplicate detection, rejection inspector, benchmark normalization |
 | `src/test/bhavcopyAudit.test.ts` | 11 | OPTFUT option quarantining without price thresholds, FUTCOM acceptance, multi-date accumulation, idempotency, conflict detection, demo separation, GOLDGUINEA 999 purity, authentic MCX multi-date integration |
 | `src/test/termStructure.test.ts` | 8 | Discrete expiry ordering, simple / continuous / geometric carry formulas, contango / backwardation, edge cases, roll-down decomposition identity |
-| `src/test/lifecycle.test.ts` | 8 | 5-trading-day tender window vs calendar days, MCX holiday calendar exclusion, weekend detection, GOLDTEN 2025 launch date check, expired contracts, pair eligibility |
-| `src/test/attribution.test.ts` | 6 | Leg-level derivations (Leg A + Leg B = Gross), net reconciliation, adverse spread with rising gold market, profitable convergence during gold crash, asymmetric exposure beta isolation, single friction accounting |
-| `src/test/backtest.test.ts` | 4 | Zero look-ahead bias validation, full trade lifecycle, entry/exit cost deductions, portfolio accounting reconciliation |
-| `src/test/alerts.test.ts` | 3 | Alert deduplication, state transition alerts, unread counter management |
-| **Total** | **71** | **100% Passed (8 Suites, 0 Failures)** |
+| `src/test/lifecycle.test.ts` | 9 | 5-trading-day tender window vs calendar days, MCX holiday calendar exclusion, weekend detection, GOLDTEN 2025 launch date check, expired contracts, pair eligibility, missing/invalid expiry metadata |
+| `src/test/attribution.test.ts` | 7 | Leg-level derivations (Leg A + Leg B = Gross), net reconciliation, adverse spread with rising gold market, profitable convergence during gold crash, asymmetric exposure beta isolation, single friction accounting, invalid/missing input defensibility |
+| `src/test/backtest.test.ts` | 6 | Zero look-ahead bias validation, extreme future shock resilience, insufficient sample size warnings, full trade lifecycle, entry/exit cost deductions, portfolio accounting reconciliation |
+| `src/test/alerts.test.ts` | 6 | Alert deduplication, signal generation, signal downgrade/invalidation state transition, tender window critical lifecycle alerts, empty dataset anomaly alerts, unread counter management |
+| **Total** | **78** | **100% Passed (8 Suites, 0 Failures)** |
 
 Execute the suite:
 ```bash

@@ -447,6 +447,11 @@ export interface BacktestPerformanceSummary {
     totalFrictionCost: number;
     totalResidualPnL: number;
   };
+  dataSufficiencyWarning?: string;
+  totalAvailableDates?: number;
+  evaluatedDates?: number;
+  warmUpDates?: number;
+  executionAssumption?: string;
 }
 
 /* ========================================================================
