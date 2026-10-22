@@ -192,8 +192,8 @@ export const Validation: React.FC<ValidationPageProps> = ({
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <MetricCard
             label="Out-of-Sample Gross Edge"
-            value={formatINR(avgGrossEdge)}
-            subtitle="Mean gross dislocation across test windows"
+            value={windows.length > 0 ? formatINR(avgGrossEdge) : 'N/A'}
+            subtitle={windows.length > 0 ? 'Mean gross dislocation across test windows' : 'Requires >= 15 sessions'}
             badge={
               <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-800">
                 ₹ / 10g
@@ -214,13 +214,17 @@ export const Validation: React.FC<ValidationPageProps> = ({
 
           <MetricCard
             label="Realized Net Edge"
-            value={formatINR(avgNetEdge)}
-            subtitle="Theoretical edge surviving friction"
+            value={windows.length > 0 ? formatINR(avgNetEdge) : 'N/A'}
+            subtitle={windows.length > 0 ? 'Theoretical edge surviving friction' : 'Insufficient historical data'}
             badge={
               <span className={`text-[11px] font-mono font-bold px-2 py-0.5 rounded ${
-                avgNetEdge > 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-800'
+                windows.length === 0
+                  ? 'bg-amber-100 text-amber-800'
+                  : avgNetEdge > 0
+                  ? 'bg-emerald-100 text-emerald-800'
+                  : 'bg-slate-100 text-slate-800'
               }`}>
-                {avgNetEdge > 0 ? 'Survives Hurdle' : 'Hurdle Fails'}
+                {windows.length === 0 ? 'Insufficient Data' : avgNetEdge > 0 ? 'Survives Hurdle' : 'Hurdle Fails'}
               </span>
             }
           />
@@ -242,7 +246,30 @@ export const Validation: React.FC<ValidationPageProps> = ({
           </span>
         </div>
 
-        <WalkForwardTimelineChart windows={windows} />
+        {windows.length > 0 ? (
+          <WalkForwardTimelineChart windows={windows} />
+        ) : (
+          <div className="bg-white border border-slate-200 rounded-xl p-8 text-center space-y-3 shadow-sm">
+            <div className="w-12 h-12 rounded-full bg-amber-100 text-amber-800 mx-auto flex items-center justify-center">
+              <History className="w-6 h-6 text-amber-600" />
+            </div>
+            <div className="font-mono font-bold text-slate-900 text-base">
+              INSUFFICIENT HISTORICAL DATA FOR OUT-OF-SAMPLE WINDOWS
+            </div>
+            <p className="text-xs text-slate-600 max-w-xl mx-auto leading-relaxed">
+              The active dataset contains {spreadSeries.length} contemporaneous trading session(s). Walk-forward validation requires at least 15 sequential sessions within the same single-provenance segment to partition into In-Sample calibration and Out-of-Sample evaluation windows without look-ahead bias or cross-provenance contamination.
+            </p>
+            <div className="pt-2">
+              <button
+                onClick={() => onNavigate('data-lab')}
+                className="px-3.5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg text-xs transition-colors font-mono inline-flex items-center gap-1.5 shadow-sm"
+              >
+                <span>Import Additional Dates in Data Lab</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

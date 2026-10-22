@@ -5,7 +5,7 @@ import { PrototypeBanner } from './components/layout/PrototypeBanner';
 import { JudgeTourStepper, JUDGE_STEPS } from './components/guide/JudgeTourStepper';
 import { marketDataService } from './services/marketDataService';
 import { validateMarketData } from './utils/dataQuality';
-import { buildPairSpreadSeries } from './engines/relativeValueEngine';
+import { buildPairSpreadSeries, calculateZScore } from './engines/relativeValueEngine';
 import { evaluateDecision } from './engines/decisionEngine';
 import {
   ContractSymbol,
@@ -77,7 +77,12 @@ export function App() {
 
   // Market Data Reactive State & Subscription
   const [dataVersion, setDataVersion] = useState(0);
-  const [dataMode, setDataMode] = useState<DataMode>('ALL');
+  const [dataMode, setDataMode] = useState<DataMode>(() => marketDataService.getActiveDataMode());
+
+  const handleSelectDataMode = (mode: DataMode) => {
+    marketDataService.setActiveDataMode(mode);
+    setDataMode(mode);
+  };
 
   useEffect(() => {
     const unsubscribe = marketDataService.subscribe(() => {
@@ -95,9 +100,8 @@ export function App() {
   }, [dataVersion, dataMode]);
 
   const availableDates = useMemo(() => {
-    const dates = Array.from(new Set(rawObservations.map(o => o.date)));
-    return dates.sort((a, b) => a.localeCompare(b));
-  }, [rawObservations]);
+    return marketDataService.getAvailableDates(dataMode);
+  }, [dataVersion, dataMode, rawObservations]);
 
   const latestAvailableDate = availableDates[availableDates.length - 1] || '2026-10-08';
 
@@ -118,7 +122,7 @@ export function App() {
   }, [normalizedObservations, selectedDate]);
 
   const asOfLatestObservations = useMemo(() => {
-    return marketDataService.getLatestObservations(selectedDate);
+    return marketDataService.getLatestObservations(selectedDate, dataMode);
   }, [dataVersion, selectedDate, dataMode]);
 
   const provenance = marketDataService.getProvenance();
@@ -197,8 +201,17 @@ export function App() {
   }, [rawObservations]);
 
   const dataHealthSummary = useMemo(() => {
-    return marketDataService.getDataHealthSummary();
-  }, [dataVersion, rawObservations]);
+    return marketDataService.getDataHealthSummary(dataMode);
+  }, [dataVersion, rawObservations, dataMode]);
+
+  // Centralized Data-Sufficiency Assessment across engines
+  const dataSufficiency = useMemo(() => {
+    return marketDataService.getDataSufficiency({
+      pair: selectedPair,
+      asOfDate: selectedDate,
+      dataMode
+    });
+  }, [selectedPair, selectedDate, dataMode, dataVersion]);
 
   // Active Pair Aligned Series evaluated As-Of selectedDate (zero look-ahead leakage)
   const seriesA = useMemo(() => {
@@ -219,7 +232,12 @@ export function App() {
     return pairSpreadSeries[pairSpreadSeries.length - 1].spread;
   }, [pairSpreadSeries]);
 
-  // Evaluate Decision Engine dynamically with strictly As-Of inputs
+  // Statistical dispersion with strict provenance isolation
+  const zScoreAnalysis = useMemo(() => {
+    return calculateZScore(pairSpreadSeries, 20);
+  }, [pairSpreadSeries]);
+
+  // Evaluate Decision Engine dynamically with strictly As-Of inputs & data sufficiency gates
   const decisionResult = useMemo(() => {
     const latestA = asOfLatestObservations[selectedPair[0]];
     const latestB = asOfLatestObservations[selectedPair[1]];
@@ -232,9 +250,21 @@ export function App() {
       oiA: latestA?.openInterest || 0,
       volB: latestB?.volume || 0,
       oiB: latestB?.openInterest || 0,
-      friction
+      friction,
+      dataSufficiency,
+      isCalculable: zScoreAnalysis.isCalculable,
+      incalculableReason: zScoreAnalysis.incalculableReason
     });
-  }, [selectedPair, latestPairSpread, manualEdge, asOfLatestObservations, friction]);
+  }, [
+    selectedPair,
+    latestPairSpread,
+    manualEdge,
+    asOfLatestObservations,
+    friction,
+    dataSufficiency,
+    zScoreAnalysis.isCalculable,
+    zScoreAnalysis.incalculableReason
+  ]);
 
   return (
     <div className="min-h-screen flex bg-slate-100 font-sans text-slate-800 overflow-x-hidden">
@@ -248,7 +278,7 @@ export function App() {
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 overflow-x-hidden">
-        {/* Header with Mobile Hamburger & As-Of Date Selector */}
+        {/* Header with Mobile Hamburger, Data Mode Selector & As-Of Date Selector */}
         <Header
           currentDate={selectedDate}
           selectedPair={selectedPair}
@@ -258,6 +288,8 @@ export function App() {
           availableDates={availableDates}
           onSelectDate={setSelectedDate}
           latestAvailableDate={latestAvailableDate}
+          dataMode={dataMode}
+          onSelectDataMode={handleSelectDataMode}
         />
 
         {/* Interactive Judge Demo Stepper Bar */}

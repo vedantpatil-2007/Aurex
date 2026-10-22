@@ -83,7 +83,7 @@ export const Ledger: React.FC<LedgerPageProps> = ({
     return calculateZScore(spreadSeries, 20);
   }, [spreadSeries]);
 
-  // Build the 8-stage ledger
+  // Build the 8-stage ledger with provenance isolation and data sufficiency
   const ledgerData = useMemo(() => {
     return buildEdgeSurvivalLedger({
       pair: selectedPair,
@@ -94,7 +94,9 @@ export const Ledger: React.FC<LedgerPageProps> = ({
       historicalMean: zScoreAnalysis.mean,
       historicalStdDev: zScoreAnalysis.standardDeviation,
       zScore: zScoreAnalysis.currentZScore,
-      manualEdgeOverride: manualEdge
+      manualEdgeOverride: manualEdge,
+      isCalculable: zScoreAnalysis.isCalculable,
+      incalculableReason: zScoreAnalysis.incalculableReason
     });
   }, [selectedPair, obsA, obsB, provenance, friction, zScoreAnalysis, manualEdge]);
 

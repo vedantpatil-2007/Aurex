@@ -38,6 +38,12 @@ export function generateWalkForwardWindows(
     const trainSlice = spreadSeries.slice(trainStartIdx, trainEndIdx + 1);
     const testSlice = spreadSeries.slice(testStartIdx, testEndIdx + 1);
 
+    // Prevent cross-provenance contamination in walk-forward windows
+    const provsInWindow = new Set([...trainSlice, ...testSlice].map(p => p.provenanceA || 'PROTOTYPE SIMULATION'));
+    if (provsInWindow.size > 1) {
+      continue; // Never allow a walk-forward window to bridge prototype and imported datasets
+    }
+
     // In-sample baseline calibration
     const inSampleSum = trainSlice.reduce((acc, p) => acc + Math.abs(p.spread), 0);
     const inSampleMeanSpread = Number((inSampleSum / trainSlice.length).toFixed(2));

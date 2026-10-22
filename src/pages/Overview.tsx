@@ -128,12 +128,26 @@ export const Overview: React.FC<OverviewPageProps> = ({
 
         <MetricCard
           label="Data Status"
-          value="Prototype"
+          value={dataHealth.totalRecords > 0 ? `${dataHealth.totalRecords} Records` : '0 Records'}
           icon={<Cpu className="w-4 h-4" />}
-          subtitle="Discrete expiries without continuous stitching"
+          subtitle={
+            dataHealth.provenanceBreakdown &&
+            dataHealth.provenanceBreakdown.prototypeSimulationCount > 0 &&
+            dataHealth.provenanceBreakdown.userImportedCount > 0
+              ? `${dataHealth.provenanceBreakdown.prototypeSimulationCount} Sim + ${dataHealth.provenanceBreakdown.userImportedCount} Imported`
+              : (dataHealth.provenanceBreakdown?.userImportedCount || 0) > 0
+              ? `${dataHealth.provenanceBreakdown?.userImportedCount} Imported Records`
+              : 'Discrete expiries without continuous stitching'
+          }
           badge={
             <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded bg-slate-900 text-amber-400">
-              Simulation
+              {dataHealth.provenanceBreakdown &&
+              dataHealth.provenanceBreakdown.prototypeSimulationCount > 0 &&
+              dataHealth.provenanceBreakdown.userImportedCount > 0
+                ? 'Hybrid'
+                : (dataHealth.provenanceBreakdown?.userImportedCount || 0) > 0
+                ? 'Imported'
+                : 'Simulation'}
             </span>
           }
         />

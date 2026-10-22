@@ -12,7 +12,8 @@ import {
   MergeAnalysis,
   MergeConflictDetail,
   DataMode,
-  ProvenanceBreakdown
+  ProvenanceBreakdown,
+  DataSufficiencyAssessment
 } from '../types/market';
 import { CONTRACT_SPECIFICATIONS, CONTRACT_LIST } from '../data/contracts';
 import { SEED_MARKET_DATA } from '../data/seedMarketData';
@@ -20,11 +21,13 @@ import { normalizeObservation } from '../engines/normalizationEngine';
 import { validateMarketData } from '../utils/dataQuality';
 import { parseBhavcopyCsv, ParseResult, ColumnMapping, computeFileSha256, computeQuickHash } from './csvParserService';
 import { SAMPLE_MCX_BHAVCOPY_CSV } from '../data/sampleOfficialBhavcopy';
+import { assessDataSufficiency } from '../engines/dataSufficiencyEngine';
 
 type DataChangeListener = (observations: MarketObservation[]) => void;
 
 const STORAGE_KEY = 'aurex_imported_dataset_v2';
 const METADATA_KEY = 'aurex_imported_metadata_v2';
+const DATA_MODE_KEY = 'aurex_data_mode_v2';
 
 /**
  * AUREX Market Data Service (Round 2 Unified Data Engine)
@@ -38,10 +41,42 @@ class MarketDataService {
   private metadata: DatasetMetadata;
   private listeners: Set<DataChangeListener> = new Set();
   private isPersistedInLocalStorage = false;
+  private activeDataMode: DataMode = 'ALL';
 
   constructor() {
+    this.activeDataMode = this.tryRestoreDataMode();
     this.metadata = this.buildSimulationMetadata();
     this.tryRestoreFromLocalStorage();
+  }
+
+  private tryRestoreDataMode(): DataMode {
+    if (typeof window === 'undefined' || !window.localStorage) return 'ALL';
+    try {
+      const stored = localStorage.getItem(DATA_MODE_KEY);
+      if (stored === 'ALL' || stored === 'PROTOTYPE_ONLY' || stored === 'IMPORTED_ONLY') {
+        return stored as DataMode;
+      }
+    } catch {
+      // fallback
+    }
+    return 'ALL';
+  }
+
+  public getActiveDataMode(): DataMode {
+    return this.activeDataMode;
+  }
+
+  public setActiveDataMode(mode: DataMode): void {
+    if (this.activeDataMode === mode) return;
+    this.activeDataMode = mode;
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        localStorage.setItem(DATA_MODE_KEY, mode);
+      } catch (e) {
+        console.warn('Could not persist dataMode to localStorage:', e);
+      }
+    }
+    this.emitChange();
   }
 
   private tryRestoreFromLocalStorage(): void {
@@ -178,14 +213,19 @@ class MarketDataService {
   }
 
   /**
-   * Returns discrete observation provenance breakdown counts
+   * Returns discrete observation provenance breakdown counts for the given or active data mode
    */
-  public getProvenanceBreakdown(): ProvenanceBreakdown {
+  public getProvenanceBreakdown(dataMode?: DataMode): ProvenanceBreakdown {
+    const effectiveMode = dataMode ?? this.activeDataMode;
+    const obsList = effectiveMode === 'ALL'
+      ? this.localObservations
+      : this.getHistoricalData({ dataMode: effectiveMode });
+
     let prototypeSimulationCount = 0;
     let userImportedCount = 0;
     let officialVerifiedCount = 0;
 
-    for (const obs of this.localObservations) {
+    for (const obs of obsList) {
       if (obs.provenance === 'OFFICIAL MCX DATA — SOURCE VERIFIED') {
         officialVerifiedCount++;
       } else if (
@@ -221,6 +261,7 @@ class MarketDataService {
   /**
    * Returns raw historical observations.
    * Filterable by symbol, date range, as-of date (preventing look-ahead bias), and data mode.
+   * Authoritative central data selection layer.
    */
   public getHistoricalData(filter?: {
     symbol?: ContractSymbol;
@@ -230,6 +271,7 @@ class MarketDataService {
     dataMode?: DataMode;
   }): MarketObservation[] {
     let result = [...this.localObservations];
+    const mode = filter?.dataMode ?? this.activeDataMode;
 
     if (filter?.symbol) {
       result = result.filter(o => o.symbol === filter.symbol);
@@ -243,9 +285,9 @@ class MarketDataService {
     if (filter?.asOfDate) {
       result = result.filter(o => o.date <= filter.asOfDate!);
     }
-    if (filter?.dataMode === 'PROTOTYPE_ONLY') {
+    if (mode === 'PROTOTYPE_ONLY') {
       result = result.filter(o => o.provenance === 'PROTOTYPE SIMULATION' || (!o.provenance && o.date <= '2026-10-08'));
-    } else if (filter?.dataMode === 'IMPORTED_ONLY') {
+    } else if (mode === 'IMPORTED_ONLY') {
       result = result.filter(o => o.provenance !== 'PROTOTYPE SIMULATION' && o.provenance !== undefined);
     }
 
@@ -281,10 +323,11 @@ class MarketDataService {
   }
 
   /**
-   * Returns latest available observation per contract symbol as-of a specific date
+   * Returns latest available observation per contract symbol as-of a specific date and mode.
    */
-  public getLatestObservations(asOfDate?: string): Record<ContractSymbol, NormalizedObservation> {
-    let dates = this.getAvailableDates();
+  public getLatestObservations(asOfDate?: string, dataMode?: DataMode): Record<ContractSymbol, NormalizedObservation> {
+    const mode = dataMode ?? this.activeDataMode;
+    let dates = this.getAvailableDates(mode);
     if (asOfDate) {
       dates = dates.filter(d => d <= asOfDate);
     }
@@ -292,7 +335,8 @@ class MarketDataService {
       return {} as Record<ContractSymbol, NormalizedObservation>;
     }
     const latestDate = dates[dates.length - 1];
-    const latestRaw = this.localObservations.filter(o => o.date === latestDate);
+    const modeObs = this.getHistoricalData({ dataMode: mode });
+    const latestRaw = modeObs.filter(o => o.date === latestDate);
 
     const result: Partial<Record<ContractSymbol, NormalizedObservation>> = {};
     for (const obs of latestRaw) {
@@ -301,11 +345,11 @@ class MarketDataService {
       }
     }
 
-    // Fallback: If any symbol is missing on latest date, pick its most recent observation as-of that date
+    // Fallback: If any symbol is missing on latest date, pick its most recent observation as-of that date within mode
     const allSymbols: ContractSymbol[] = ['GOLDM', 'GOLDTEN', 'GOLDGUINEA', 'GOLDPETAL'];
     for (const sym of allSymbols) {
       if (!result[sym]) {
-        const symObs = this.localObservations
+        const symObs = modeObs
           .filter(o => o.symbol === sym && (!asOfDate || o.date <= asOfDate))
           .sort((a, b) => a.date.localeCompare(b.date));
         if (symObs.length > 0) {
@@ -318,26 +362,30 @@ class MarketDataService {
   }
 
   /**
-   * Returns distinct trading dates sorted in ascending chronological order
+   * Returns distinct trading dates sorted in ascending chronological order for the given or active data mode
    */
-  public getAvailableDates(): string[] {
-    const dates = Array.from(new Set(this.localObservations.map(o => o.date)));
+  public getAvailableDates(dataMode?: DataMode): string[] {
+    const mode = dataMode ?? this.activeDataMode;
+    const modeObs = this.getHistoricalData({ dataMode: mode });
+    const dates = Array.from(new Set(modeObs.map(o => o.date)));
     return dates.sort((a, b) => a.localeCompare(b));
   }
 
   /**
-   * Returns observations for a specific trading date
+   * Returns observations for a specific trading date and data mode
    */
-  public getObservationsForDate(date: string): NormalizedObservation[] {
-    const matches = this.localObservations.filter(o => o.date === date);
+  public getObservationsForDate(date: string, dataMode?: DataMode): NormalizedObservation[] {
+    const mode = dataMode ?? this.activeDataMode;
+    const modeObs = this.getHistoricalData({ dataMode: mode });
+    const matches = modeObs.filter(o => o.date === date);
     return matches.map(obs => normalizeObservation(obs));
   }
 
   /**
    * Returns term structure points for a specific date and symbol, sorted by DTE
    */
-  public getTermStructure(date: string, symbol: ContractSymbol): TermStructurePoint[] {
-    const dateObs = this.getObservationsForDate(date).filter(o => o.symbol === symbol);
+  public getTermStructure(date: string, symbol: ContractSymbol, dataMode?: DataMode): TermStructurePoint[] {
+    const dateObs = this.getObservationsForDate(date, dataMode).filter(o => o.symbol === symbol);
 
     // Sort ascending by days to expiry
     dateObs.sort((a, b) => a.daysToExpiry - b.daysToExpiry);
@@ -367,25 +415,52 @@ class MarketDataService {
   }
 
   /**
+   * Evaluates centralized data sufficiency across modules
+   */
+  public getDataSufficiency(params?: {
+    pair?: [ContractSymbol, ContractSymbol];
+    asOfDate?: string;
+    dataMode?: DataMode;
+  }): DataSufficiencyAssessment {
+    const mode = params?.dataMode ?? this.activeDataMode;
+    const pair = params?.pair ?? ['GOLDM', 'GOLDTEN'];
+    const asOfDate = params?.asOfDate ?? this.getAvailableDates(mode).slice(-1)[0] ?? '2026-10-08';
+    const observations = this.getNormalizedHistoricalData({ dataMode: mode, asOfDate });
+    return assessDataSufficiency({ observations, pair, asOfDate, dataMode: mode });
+  }
+
+  /**
    * Returns Data Health metrics for the Data Health Panel
    */
-  public getDataHealthSummary(): DataHealthSummary {
-    const dates = this.getAvailableDates();
+  public getDataHealthSummary(dataMode?: DataMode): DataHealthSummary {
+    const mode = dataMode ?? this.activeDataMode;
+    const dates = this.getAvailableDates(mode);
     const lastDate = dates[dates.length - 1] || 'N/A';
-    const report = validateMarketData(this.localObservations);
-    const breakdown = this.getProvenanceBreakdown();
+    const modeObs = this.getHistoricalData({ dataMode: mode });
+    const report = validateMarketData(modeObs);
+    const breakdown = this.getProvenanceBreakdown(mode);
     const isHybrid = breakdown.prototypeSimulationCount > 0 && breakdown.userImportedCount > 0;
-    const currentProvenance = isHybrid ? 'HYBRID / MIXED PROVENANCE' : this.provenance;
+    const currentProvenance = mode === 'PROTOTYPE_ONLY'
+      ? 'PROTOTYPE SIMULATION'
+      : mode === 'IMPORTED_ONLY'
+      ? 'USER-IMPORTED DATA — SOURCE UNVERIFIED'
+      : isHybrid
+      ? 'HYBRID / MIXED PROVENANCE'
+      : this.provenance;
 
-    const availableContracts = new Set(this.localObservations.map(o => o.symbol));
+    const availableContracts = new Set(modeObs.map(o => o.symbol));
 
     return {
       source: isHybrid
         ? `Hybrid Dataset (${breakdown.prototypeSimulationCount} Prototype Sim + ${breakdown.userImportedCount} User-Imported)`
+        : mode === 'PROTOTYPE_ONLY'
+        ? 'Calibrated Prototype Simulation'
+        : mode === 'IMPORTED_ONLY'
+        ? `Imported MCX Bhavcopy (${breakdown.userImportedCount} observations)`
         : this.metadata.sourceClassification,
-      provenance: this.provenance,
+      provenance: currentProvenance,
       provenanceBreakdown: breakdown,
-      totalRecords: this.localObservations.length,
+      totalRecords: modeObs.length,
       validRecords: report.validRecords,
       rejectedRecords: this.metadata.rejectedRows,
       contractsCount: availableContracts.size,

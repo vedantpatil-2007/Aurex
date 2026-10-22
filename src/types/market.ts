@@ -1,6 +1,31 @@
 export type ContractSymbol = 'GOLDM' | 'GOLDTEN' | 'GOLDGUINEA' | 'GOLDPETAL';
 export type DataMode = 'ALL' | 'PROTOTYPE_ONLY' | 'IMPORTED_ONLY';
 
+export interface DataSufficiencyAssessment {
+  dataMode: DataMode;
+  asOfDate: string;
+  totalEligibleObservations: number;
+  distinctTradingDates: number;
+  contemporaneousPairDates: number;
+  earliestEligibleDate: string;
+  latestEligibleDate: string;
+  isPairMatched: boolean;
+  canMeasureSingleDateSpread: boolean;
+  canComputeRollingDistribution: boolean;
+  canComputeZScore: boolean;
+  canRunWalkForwardBacktest: boolean;
+  canFormActionableVerdict: boolean;
+  sufficiencyStatus: 'SUFFICIENT' | 'PRELIMINARY' | 'INSUFFICIENT';
+  backtestReadiness: 'READY' | 'PRELIMINARY_SAMPLE' | 'INSUFFICIENT_HISTORICAL_DATA';
+  explanation: string;
+  reasons: string[];
+  provenanceBreakdown: {
+    prototypeCount: number;
+    importedCount: number;
+    officialVerifiedCount: number;
+  };
+}
+
 export interface ContractSpecification {
   symbol: ContractSymbol;
   name: string;
@@ -65,6 +90,9 @@ export interface RelativeValueSpreadPoint {
   zScore?: number;
   meanSpread?: number;
   stdDevSpread?: number;
+  provenanceA?: DataProvenance;
+  provenanceB?: DataProvenance;
+  isCrossProvenanceBoundary?: boolean;
 }
 
 export interface ZScoreAnalysis {
@@ -77,6 +105,9 @@ export interface ZScoreAnalysis {
   isCalculable?: boolean;
   incalculableReason?: string;
   rollingWindowDays?: number;
+  isCrossProvenanceContaminated?: boolean;
+  calibrationObservationCount?: number;
+  calibrationProvenance?: DataProvenance;
 }
 
 export type LiquidityGrade = 'PASS' | 'BORDERLINE' | 'FAIL';
@@ -112,6 +143,8 @@ export interface DecisionResult {
   rationale: string;
   triggerRules: string[];
   waterfall: CostWaterfallBreakdown;
+  dataSufficiency?: DataSufficiencyAssessment;
+  isDefensible?: boolean;
 }
 
 export interface ValidationWindowResult {

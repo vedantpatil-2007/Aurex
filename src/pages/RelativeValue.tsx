@@ -186,14 +186,22 @@ export const RelativeValue: React.FC<RelativeValuePageProps> = ({
 
         <div className="bg-white border border-slate-200 rounded-lg p-3">
           <div className="text-[10px] font-mono uppercase text-slate-400">Mean Spread (μ)</div>
-          <div className="text-base font-bold font-mono text-slate-700 mt-1">{formatINR(meanSpread)}</div>
-          <div className="text-[10px] text-slate-400">Historical Baseline Mean</div>
+          <div className="text-base font-bold font-mono text-slate-700 mt-1">
+            {zScoreAnalysis.isCalculable !== false ? formatINR(meanSpread) : 'N/A'}
+          </div>
+          <div className="text-[10px] text-slate-400">
+            {zScoreAnalysis.isCalculable !== false ? 'Historical Baseline Mean' : 'Requires >= 2 sessions'}
+          </div>
         </div>
 
         <div className="bg-white border border-slate-200 rounded-lg p-3">
           <div className="text-[10px] font-mono uppercase text-slate-400">Volatility (σ)</div>
-          <div className="text-base font-bold font-mono text-slate-700 mt-1">₹{spreadVolatility.toFixed(2)}</div>
-          <div className="text-[10px] text-slate-400">Spread Dispersion</div>
+          <div className="text-base font-bold font-mono text-slate-700 mt-1">
+            {zScoreAnalysis.isCalculable !== false ? `₹${spreadVolatility.toFixed(2)}` : 'N/A'}
+          </div>
+          <div className="text-[10px] text-slate-400">
+            {zScoreAnalysis.isCalculable !== false ? 'Spread Dispersion' : 'Zero Dispersion (Single Bar)'}
+          </div>
         </div>
 
         <div className="bg-white border border-slate-200 rounded-lg p-3">
@@ -220,6 +228,22 @@ export const RelativeValue: React.FC<RelativeValuePageProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Provenance Isolation & Data Sufficiency Notice */}
+      {zScoreAnalysis.isCalculable === false && (
+        <div className="bg-amber-50 border border-amber-300 rounded-xl p-4 flex items-start gap-3 text-xs shadow-xs">
+          <AlertTriangle className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <div className="font-bold font-mono text-amber-950">
+              Statistical Calibration Notice: Provenance Isolation Enforced
+            </div>
+            <p className="text-amber-900 leading-relaxed">
+              {zScoreAnalysis.incalculableReason || 'Insufficient historical sessions to calculate statistical dispersion.'}
+              Single-day relative-value spreads are measurable directly from contemporaneous settlement prices, but statistical volatility, rolling distributions, and Z-scores require multi-session history within the same provenance. In accordance with AUREX quantitative standards, statistical baselines are quarantined from disparate datasets.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Chart 1: Normalized Price Comparison for Pair */}
       <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-3">

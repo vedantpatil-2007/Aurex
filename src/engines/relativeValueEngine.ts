@@ -83,6 +83,9 @@ export function buildPairSpreadSeries(
     const spread = calculateSpread(obsA.normalizedPrice, obsB.normalizedPrice);
     const avgPrice = (obsA.normalizedPrice + obsB.normalizedPrice) / 2;
     const spreadPercentage = avgPrice > 0 ? Number(((spread / avgPrice) * 100).toFixed(4)) : 0;
+    const provA = obsA.provenance || 'PROTOTYPE SIMULATION';
+    const provB = obsB.provenance || 'PROTOTYPE SIMULATION';
+    const isCrossBoundary = spreadPoints.length > 0 && spreadPoints[spreadPoints.length - 1].provenanceA !== provA;
 
     spreadPoints.push({
       date,
@@ -91,7 +94,10 @@ export function buildPairSpreadSeries(
       priceA: obsA.normalizedPrice,
       priceB: obsB.normalizedPrice,
       spread,
-      spreadPercentage
+      spreadPercentage,
+      provenanceA: provA,
+      provenanceB: provB,
+      isCrossProvenanceBoundary: isCrossBoundary
     });
   }
 
@@ -102,11 +108,11 @@ export function buildPairSpreadSeries(
  * Calculates statistical metrics (Mean, Volatility, Z-Score) for a spread series.
  * Mathematical guarantee:
  * currentZScore = (Displayed Spread - Displayed Mean) / Displayed StdDev
- * Handles edge cases:
- * - Empty series
- * - Length < 5 sessions (insufficient history)
- * - Standard deviation == 0
- * - NaN inputs
+ *
+ * Strict Provenance Isolation Rule:
+ * Statistical parameters (mean, standard deviation, Z-score) are strictly calibrated
+ * using observations sharing the same provenance segment as the target point.
+ * Prototype observations NEVER serve as the statistical baseline for user-imported observations.
  */
 export function calculateZScore(
   spreadPoints: RelativeValueSpreadPoint[],
@@ -126,38 +132,64 @@ export function calculateZScore(
     };
   }
 
-  const validSpreads = spreadPoints
+  const lastPoint = spreadPoints[spreadPoints.length - 1];
+  const targetProv = lastPoint.provenanceA || 'PROTOTYPE SIMULATION';
+
+  // Strict provenance isolation: only calibrate from observations sharing target provenance
+  const eligiblePoints = spreadPoints.filter(
+    p => (p.provenanceA || 'PROTOTYPE SIMULATION') === targetProv
+  );
+  const eligibleSpreads = eligiblePoints
     .map(p => p.spread)
     .filter(val => isFinite(val));
 
-  if (validSpreads.length === 0) {
-    return {
-      currentZScore: 0,
-      mean: 0,
-      standardDeviation: 0,
-      minSpread: 0,
-      maxSpread: 0,
-      series: spreadPoints,
-      isCalculable: false,
-      incalculableReason: 'No valid numeric spreads in series',
-      rollingWindowDays: rollingWindow
-    };
+  // Determine calculability based on isolated single-provenance history
+  let isCalculable = true;
+  let incalculableReason: string | undefined = undefined;
+
+  if (eligibleSpreads.length < 2) {
+    isCalculable = false;
+    incalculableReason = targetProv === 'PROTOTYPE SIMULATION'
+      ? 'Insufficient history (< 2 sessions)'
+      : `Insufficient single-provenance history (${eligibleSpreads.length} session available). Statistical calibration cannot cross provenance boundary into prototype simulation.`;
   }
 
-  // Full sample baseline statistics
-  const sum = validSpreads.reduce((acc, v) => acc + v, 0);
-  const mean = sum / validSpreads.length;
-  
-  const variance = validSpreads.reduce((acc, v) => acc + Math.pow(v - mean, 2), 0) / validSpreads.length;
+  // Calculate isolated baseline statistics
+  const sum = eligibleSpreads.reduce((acc, v) => acc + v, 0);
+  const mean = eligibleSpreads.length > 0 ? sum / eligibleSpreads.length : 0;
+
+  let variance = 0;
+  if (eligibleSpreads.length >= 2) {
+    variance = eligibleSpreads.reduce((acc, v) => acc + Math.pow(v - mean, 2), 0) / eligibleSpreads.length;
+  }
   const standardDeviation = Math.sqrt(variance);
 
-  const minSpread = Math.min(...validSpreads);
-  const maxSpread = Math.max(...validSpreads);
+  if (isCalculable && standardDeviation <= 0.0001) {
+    isCalculable = false;
+    incalculableReason = 'Zero spread dispersion (σ = 0)';
+  }
 
-  // Calculate rolling statistics for each point in series
+  const minSpread = eligibleSpreads.length > 0 ? Math.min(...eligibleSpreads) : 0;
+  const maxSpread = eligibleSpreads.length > 0 ? Math.max(...eligibleSpreads) : 0;
+
+  // Calculate rolling statistics for each point in series, segmented by provenance
   const enrichedSeries: RelativeValueSpreadPoint[] = spreadPoints.map((point, index) => {
-    const startIdx = Math.max(0, index - rollingWindow + 1);
-    const windowSlice = spreadPoints.slice(startIdx, index + 1).map(p => p.spread);
+    const ptProv = point.provenanceA || 'PROTOTYPE SIMULATION';
+    // Isolate rolling slice strictly to prior observations of the same provenance
+    const singleProvHistory = spreadPoints
+      .slice(0, index + 1)
+      .filter(p => (p.provenanceA || 'PROTOTYPE SIMULATION') === ptProv);
+
+    const windowSlice = singleProvHistory.slice(-rollingWindow).map(p => p.spread);
+
+    if (windowSlice.length < 2) {
+      return {
+        ...point,
+        zScore: 0,
+        meanSpread: Number((windowSlice[0] || 0).toFixed(2)),
+        stdDevSpread: 0
+      };
+    }
 
     const wSum = windowSlice.reduce((acc, v) => acc + v, 0);
     const wMean = wSum / windowSlice.length;
@@ -181,23 +213,10 @@ export function calculateZScore(
     };
   });
 
-  const lastPoint = enrichedSeries[enrichedSeries.length - 1];
   const lastSpread = lastPoint.spread;
 
-  let isCalculable = true;
-  let incalculableReason: string | undefined = undefined;
-
-  if (standardDeviation <= 0.0001) {
-    isCalculable = false;
-    incalculableReason = 'Zero spread dispersion (σ = 0)';
-  } else if (validSpreads.length < 2) {
-    isCalculable = false;
-    incalculableReason = 'Insufficient history (< 2 sessions)';
-  }
-
-  // Mathematical consistency:
-  // Z = (Spread - Mean) / StdDev
-  const currentZScore = isCalculable
+  // Institutional Z-Score formula: Z = (Spread - Mean) / StdDev
+  const currentZScore = isCalculable && standardDeviation > 0.0001
     ? Number(((lastSpread - mean) / standardDeviation).toFixed(2))
     : 0;
 
@@ -210,6 +229,8 @@ export function calculateZScore(
     series: enrichedSeries,
     isCalculable,
     incalculableReason,
-    rollingWindowDays: rollingWindow
+    rollingWindowDays: rollingWindow,
+    calibrationObservationCount: eligibleSpreads.length,
+    calibrationProvenance: targetProv
   };
 }

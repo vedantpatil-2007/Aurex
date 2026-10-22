@@ -1,4 +1,10 @@
-import { ContractSymbol, DecisionResult, DecisionState, FrictionAssumptions } from '../types/market';
+import {
+  ContractSymbol,
+  DecisionResult,
+  DecisionState,
+  FrictionAssumptions,
+  DataSufficiencyAssessment
+} from '../types/market';
 import { calculateLiquidityScore, evaluateLiquidityGrade, buildCostWaterfall } from './liquidityCostEngine';
 
 export interface DecisionEngineInputs {
@@ -10,22 +16,37 @@ export interface DecisionEngineInputs {
   volB: number;
   oiB: number;
   friction: FrictionAssumptions;
+  dataSufficiency?: DataSufficiencyAssessment;
+  isCalculable?: boolean;
+  incalculableReason?: string;
 }
 
 /**
- * AUREX Core Decision Engine (Phase 2 Enhanced)
+ * AUREX Core Decision Engine (Phase 2 Enhanced + Master Integrity)
  *
  * Pipeline:
- * THEORETICAL EDGE -> LIQUIDITY CHECK -> EXECUTION COST CHECK -> DECISION
+ * DATA SUFFICIENCY GATE -> LIQUIDITY CHECK -> EXECUTION COST CHECK -> DECISION
  *
  * States:
- * - ACTIONABLE: Observed relative-value edge survives liquidity and estimated execution friction.
- * - WATCH: Relative-value anomaly detected, but liquidity is near the configured threshold.
- * - NO TRADE: Theoretical opportunity does not survive estimated execution friction (or fails liquidity).
+ * - ACTIONABLE: Observed relative-value edge survives data sufficiency, liquidity and estimated execution friction.
+ * - WATCH: Relative-value anomaly detected, but liquidity is near the configured threshold or preliminary.
+ * - NO TRADE: Theoretical opportunity does not survive estimated execution friction, fails liquidity, or lacks historical data.
  *             (Recognized as a valid capital preservation system outcome).
  */
 export function evaluateDecision(inputs: DecisionEngineInputs): DecisionResult {
-  const { pair, observedSpread, manualExpectedEdge, volA, oiA, volB, oiB, friction } = inputs;
+  const {
+    pair,
+    observedSpread,
+    manualExpectedEdge,
+    volA,
+    oiA,
+    volB,
+    oiB,
+    friction,
+    dataSufficiency,
+    isCalculable,
+    incalculableReason
+  } = inputs;
 
   const expectedEdge = manualExpectedEdge !== undefined
     ? Math.max(0, manualExpectedEdge)
@@ -42,8 +63,19 @@ export function evaluateDecision(inputs: DecisionEngineInputs): DecisionResult {
   let rationale = '';
   const triggerRules: string[] = [];
 
-  // 1. Liquidity check first (Capital preservation / market impact rule)
-  if (liquidityGrade === 'FAIL') {
+  // Gate 0: Data Sufficiency & Provenance Isolation (Prevent unsupported actionable verdicts on isolated single dates)
+  const isMarketDerived = manualExpectedEdge === undefined;
+  const lacksSufficiency = isCalculable === false || (dataSufficiency && !dataSufficiency.canFormActionableVerdict);
+
+  if (isMarketDerived && lacksSufficiency) {
+    decision = 'NO TRADE';
+    const reasonDetail = incalculableReason || dataSufficiency?.reasons?.[0] || 'Insufficient historical data to validate statistical distribution';
+    rationale = `Theoretical opportunity cannot be validated: ${reasonDetail}. A single-session or isolated observation without established single-provenance spread distribution cannot produce an actionable market execution verdict.`;
+    triggerRules.push('Data Sufficiency Gate Triggered: Insufficient historical sessions to validate statistical edge.');
+    triggerRules.push('Capital Preservation Rule: Capital preserved — no market orders without statistically verified distribution.');
+  }
+  // 1. Liquidity check (Capital preservation / market impact rule)
+  else if (liquidityGrade === 'FAIL') {
     decision = 'NO TRADE';
     rationale = `Theoretical opportunity does not survive execution screening: Liquidity score (${liquidityScore}/100) failed minimum execution threshold (${friction.liquidityThresholdScore}). Order book depth is insufficient to execute without severe adverse market impact.`;
     triggerRules.push(`Rule 1 Triggered: Liquidity Grade = FAIL (${liquidityScore} < ${Math.round(friction.liquidityThresholdScore * 0.75)})`);
@@ -83,6 +115,8 @@ export function evaluateDecision(inputs: DecisionEngineInputs): DecisionResult {
     decision,
     rationale,
     triggerRules,
-    waterfall
+    waterfall,
+    dataSufficiency,
+    isDefensible: decision === 'ACTIONABLE'
   };
 }

@@ -13,7 +13,8 @@ import {
   ContractSymbol,
   DecisionResult,
   DatasetMetadata,
-  PlatformAlert
+  PlatformAlert,
+  DataMode
 } from '../../types/market';
 import { alertManager } from '../../engines/alertEngine';
 
@@ -26,6 +27,8 @@ interface HeaderProps {
   availableDates?: string[];
   onSelectDate?: (date: string) => void;
   latestAvailableDate?: string;
+  dataMode?: DataMode;
+  onSelectDataMode?: (mode: DataMode) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -36,7 +39,9 @@ export const Header: React.FC<HeaderProps> = ({
   onToggleMobileMenu,
   availableDates,
   onSelectDate,
-  latestAvailableDate
+  latestAvailableDate,
+  dataMode,
+  onSelectDataMode
 }) => {
   const [isAlertDrawerOpen, setIsAlertDrawerOpen] = useState(false);
   const [alerts, setAlerts] = useState<PlatformAlert[]>([]);
@@ -93,7 +98,46 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       {/* Right-side status, pair indicator & notification bell */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2 sm:gap-3">
+        {/* Authoritative Data Mode Selector */}
+        {dataMode && onSelectDataMode && (
+          <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs">
+            <button
+              onClick={() => onSelectDataMode('ALL')}
+              className={`px-2 py-1 rounded font-mono font-bold text-[10px] sm:text-[11px] transition-colors ${
+                dataMode === 'ALL'
+                  ? 'bg-slate-900 text-amber-400 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+              title="ALL mode: Access prototype simulation and imported observations with isolated provenance"
+            >
+              ALL
+            </button>
+            <button
+              onClick={() => onSelectDataMode('PROTOTYPE_ONLY')}
+              className={`px-2 py-1 rounded font-mono font-bold text-[10px] sm:text-[11px] transition-colors ${
+                dataMode === 'PROTOTYPE_ONLY'
+                  ? 'bg-amber-500 text-slate-950 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+              title="PROTOTYPE ONLY: Calibrated simulation for demonstrations and architectural testing"
+            >
+              PROTOTYPE
+            </button>
+            <button
+              onClick={() => onSelectDataMode('IMPORTED_ONLY')}
+              className={`px-2 py-1 rounded font-mono font-bold text-[10px] sm:text-[11px] transition-colors ${
+                dataMode === 'IMPORTED_ONLY'
+                  ? 'bg-sky-600 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+              title="IMPORTED ONLY: Authentic user-imported MCX Bhavcopy market observations only"
+            >
+              IMPORTED
+            </button>
+          </div>
+        )}
+
         {/* Active pair quick pill */}
         <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-100 border border-slate-200 text-xs text-slate-700">
           <span className="text-slate-400 font-medium text-[11px]">Active Pair:</span>

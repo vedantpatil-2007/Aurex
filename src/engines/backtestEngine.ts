@@ -55,8 +55,8 @@ export function runWalkForwardBacktest(
     .sort((a, b) => a.localeCompare(b));
 
   let dataSufficiencyWarning: string | undefined = undefined;
-  if (commonDates.length < warmUpDays) {
-    dataSufficiencyWarning = `Sample size limitation: Only ${commonDates.length} contemporaneous trading session(s) available for pair ${pair.join('/')}, whereas statistical walk-forward calibration requires >= ${warmUpDays} warm-up sessions. Zero trades could be calibrated on this limited sample; meaningful statistical validation requires continuous historical coverage (target >= 60 sessions).`;
+  if (commonDates.length < warmUpDays || commonDates.length < 15) {
+    dataSufficiencyWarning = `INSUFFICIENT HISTORICAL DATA (Sample size limitation): Only ${commonDates.length} contemporaneous trading session(s) available for pair ${pair.join('/')}, whereas statistical walk-forward calibration requires >= ${Math.max(15, warmUpDays)} warm-up sessions. Zero trades could be calibrated on this limited sample; meaningful statistical validation requires continuous historical coverage (target >= 60 sessions). Single-session or isolated datasets cannot support historical walk-forward strategy validation.`;
   } else if (commonDates.length < 30) {
     dataSufficiencyWarning = `Preliminary sample: Evaluated ${commonDates.length} trading sessions (${commonDates.length - warmUpDays} out-of-sample). Statistical power is limited; results represent illustrative model calibration rather than proven alpha.`;
   }
@@ -94,8 +94,18 @@ export function runWalkForwardBacktest(
   // Track historical daily returns for Sharpe ratio
   const dailyReturns: number[] = [];
 
-  // Build daily spread series for chronological replay
-  const spreadSeries: { date: string; spread: number; priceA: number; priceB: number; expA: string; expB: string }[] = [];
+  // Build daily spread series for chronological replay with provenance preservation
+  const spreadSeries: {
+    date: string;
+    spread: number;
+    priceA: number;
+    priceB: number;
+    expA: string;
+    expB: string;
+    provA: string;
+    provB: string;
+  }[] = [];
+
   for (const date of commonDates) {
     const a = obsByDateA.get(date)!;
     const b = obsByDateB.get(date)!;
@@ -106,7 +116,9 @@ export function runWalkForwardBacktest(
       priceA: a.normalizedPrice,
       priceB: b.normalizedPrice,
       expA: a.expiryDate,
-      expB: b.expiryDate
+      expB: b.expiryDate,
+      provA: a.provenance || 'PROTOTYPE SIMULATION',
+      provB: b.provenance || 'PROTOTYPE SIMULATION'
     });
   }
 
@@ -129,11 +141,20 @@ export function runWalkForwardBacktest(
       let shouldExit = false;
       let exitReason: TradeExitReason = 'TARGET_CONVERGENCE';
 
-      // Check Lifecycle Eligibility (tender window forced exit)
-      const lifecycleCheck = evaluatePairLifecycleEligibility(pair, current.date, current.expA, current.expB);
-      if (!lifecycleCheck.isEligible) {
+      // Cross-provenance boundary guard: force close if regime switches from prototype to imported
+      const prevBar = spreadSeries[t - 1];
+      if (prevBar && prevBar.provA !== current.provA) {
         shouldExit = true;
-        exitReason = 'TENDER_WINDOW_FORCED_EXIT';
+        exitReason = 'END_OF_SIMULATION';
+      }
+
+      // Check Lifecycle Eligibility (tender window forced exit)
+      if (!shouldExit) {
+        const lifecycleCheck = evaluatePairLifecycleEligibility(pair, current.date, current.expA, current.expB);
+        if (!lifecycleCheck.isEligible) {
+          shouldExit = true;
+          exitReason = 'TENDER_WINDOW_FORCED_EXIT';
+        }
       }
 
       // Check Max Holding Period
@@ -143,29 +164,36 @@ export function runWalkForwardBacktest(
       }
 
       // Check statistical convergence or stop loss using historical trailing window up to t-1
-      if (!shouldExit && t >= warmUpDays) {
-        const histWindow = spreadSeries.slice(Math.max(0, t - warmUpDays), t);
-        const mean = histWindow.reduce((acc, p) => acc + p.spread, 0) / histWindow.length;
-        const variance = histWindow.reduce((acc, p) => acc + Math.pow(p.spread - mean, 2), 0) / histWindow.length;
-        const stdDev = Math.sqrt(variance) || 1.0;
-        const currentZ = (currentSpread - mean) / stdDev;
+      // Provenance Isolation: only consider prior bars with matching provenance
+      if (!shouldExit) {
+        const matchingPriorBars = spreadSeries
+          .slice(0, t)
+          .filter(p => p.provA === current.provA);
 
-        // Target convergence exit: Z-score reverts to threshold (e.g. 0.0)
-        if (openTrade.direction === 'LONG_SPREAD' && currentZ >= zScoreExitThreshold) {
-          shouldExit = true;
-          exitReason = 'TARGET_CONVERGENCE';
-        } else if (openTrade.direction === 'SHORT_SPREAD' && currentZ <= -zScoreExitThreshold) {
-          shouldExit = true;
-          exitReason = 'TARGET_CONVERGENCE';
-        }
+        if (matchingPriorBars.length >= warmUpDays) {
+          const histWindow = matchingPriorBars.slice(-warmUpDays);
+          const mean = histWindow.reduce((acc, p) => acc + p.spread, 0) / histWindow.length;
+          const variance = histWindow.reduce((acc, p) => acc + Math.pow(p.spread - mean, 2), 0) / histWindow.length;
+          const stdDev = Math.sqrt(variance) || 1.0;
+          const currentZ = (currentSpread - mean) / stdDev;
 
-        // Stop loss: Z-score expands adversely beyond stop threshold
-        if (openTrade.direction === 'LONG_SPREAD' && currentZ <= -zScoreStopLoss) {
-          shouldExit = true;
-          exitReason = 'STOP_LOSS';
-        } else if (openTrade.direction === 'SHORT_SPREAD' && currentZ >= zScoreStopLoss) {
-          shouldExit = true;
-          exitReason = 'STOP_LOSS';
+          // Target convergence exit: Z-score reverts to threshold (e.g. 0.0)
+          if (openTrade.direction === 'LONG_SPREAD' && currentZ >= zScoreExitThreshold) {
+            shouldExit = true;
+            exitReason = 'TARGET_CONVERGENCE';
+          } else if (openTrade.direction === 'SHORT_SPREAD' && currentZ <= -zScoreExitThreshold) {
+            shouldExit = true;
+            exitReason = 'TARGET_CONVERGENCE';
+          }
+
+          // Stop loss: Z-score expands adversely beyond stop threshold
+          if (openTrade.direction === 'LONG_SPREAD' && currentZ <= -zScoreStopLoss) {
+            shouldExit = true;
+            exitReason = 'STOP_LOSS';
+          } else if (openTrade.direction === 'SHORT_SPREAD' && currentZ >= zScoreStopLoss) {
+            shouldExit = true;
+            exitReason = 'STOP_LOSS';
+          }
         }
       }
 
@@ -232,15 +260,21 @@ export function runWalkForwardBacktest(
       }
     }
 
-    // 2. Evaluate entry opportunities on current bar t (requires warm-up history [t - warmUpDays, t - 1])
-    if (!openTrade && t >= warmUpDays) {
-      // Historical calibration window: strictly [t - warmUpDays, t - 1] (ZERO look-ahead)
-      const histWindow = spreadSeries.slice(t - warmUpDays, t);
-      const mean = histWindow.reduce((acc, p) => acc + p.spread, 0) / histWindow.length;
-      const variance = histWindow.reduce((acc, p) => acc + Math.pow(p.spread - mean, 2), 0) / histWindow.length;
-      const stdDev = Math.sqrt(variance) || 1.0;
+    // 2. Evaluate entry opportunities on current bar t (requires warm-up history of matching provenance)
+    if (!openTrade) {
+      // Isolate historical calibration strictly to prior observations of the same provenance
+      const matchingPriorBars = spreadSeries
+        .slice(0, t)
+        .filter(p => p.provA === current.provA);
 
-      const currentZ = (current.spread - mean) / stdDev;
+      if (matchingPriorBars.length >= warmUpDays) {
+        // Historical calibration window: strictly single-provenance prior warmUpDays (ZERO look-ahead)
+        const histWindow = matchingPriorBars.slice(-warmUpDays);
+        const mean = histWindow.reduce((acc, p) => acc + p.spread, 0) / histWindow.length;
+        const variance = histWindow.reduce((acc, p) => acc + Math.pow(p.spread - mean, 2), 0) / histWindow.length;
+        const stdDev = Math.sqrt(variance) || 1.0;
+
+        const currentZ = (current.spread - mean) / stdDev;
 
       let direction: PositionDirection | null = null;
       if (currentZ <= -zScoreEntryThreshold) {
@@ -293,6 +327,7 @@ export function runWalkForwardBacktest(
         }
       }
     }
+  }
 
     // 3. Record daily equity curve
     const dayPnl = currentEquity - prevEquity;

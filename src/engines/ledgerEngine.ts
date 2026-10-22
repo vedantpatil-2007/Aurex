@@ -4,7 +4,8 @@ import {
   FrictionAssumptions, 
   EdgeSurvivalLedgerData, 
   LedgerStageData,
-  DataProvenance
+  DataProvenance,
+  DataSufficiencyAssessment
 } from '../types/market';
 import { CONTRACT_SPECIFICATIONS } from '../data/contracts';
 import { evaluateContractComparability } from './comparabilityEngine';
@@ -22,6 +23,9 @@ export interface LedgerGenerationParams {
   historicalStdDev?: number;
   zScore?: number;
   manualEdgeOverride?: number;
+  dataSufficiency?: DataSufficiencyAssessment;
+  isCalculable?: boolean;
+  incalculableReason?: string;
 }
 
 /**
@@ -40,7 +44,10 @@ export function buildEdgeSurvivalLedger(params: LedgerGenerationParams): EdgeSur
     historicalMean = 0,
     historicalStdDev = 0,
     zScore = 0,
-    manualEdgeOverride
+    manualEdgeOverride,
+    dataSufficiency,
+    isCalculable = true,
+    incalculableReason
   } = params;
 
   const symbolA = pair[0];
@@ -58,7 +65,7 @@ export function buildEdgeSurvivalLedger(params: LedgerGenerationParams): EdgeSur
   const normB = obsB?.normalizedPrice || 0;
   const observedSpread = calculateSpread(normA, normB);
 
-  // Evaluate Decision Engine
+  // Evaluate Decision Engine with strictly aligned inputs & data sufficiency
   const decisionResult = evaluateDecision({
     pair,
     observedSpread,
@@ -67,7 +74,10 @@ export function buildEdgeSurvivalLedger(params: LedgerGenerationParams): EdgeSur
     oiA: obsA?.openInterest || 0,
     volB: obsB?.volume || 0,
     oiB: obsB?.openInterest || 0,
-    friction
+    friction,
+    dataSufficiency,
+    isCalculable,
+    incalculableReason
   });
 
   const stages: LedgerStageData[] = [];
@@ -118,22 +128,29 @@ export function buildEdgeSurvivalLedger(params: LedgerGenerationParams): EdgeSur
   });
 
   // STAGE 3: RELATIVE-VALUE MEASUREMENT
+  const zScoreDisplay = isCalculable ? `${zScore > 0 ? '+' : ''}${zScore.toFixed(2)}σ` : `N/A (${incalculableReason || 'Insufficient History'})`;
   stages.push({
     stageNumber: 3,
     stageName: 'RELATIVE-VALUE MEASUREMENT',
-    headline: `Spread S_t = ₹${observedSpread.toFixed(2)}/10g | Z-Score = ${zScore > 0 ? '+' : ''}${zScore.toFixed(2)}σ`,
-    status: Math.abs(observedSpread) > 100 ? 'PASS' : 'INFO',
+    headline: `Spread S_t = ₹${observedSpread.toFixed(2)}/10g | Z-Score: ${zScoreDisplay}`,
+    status: isCalculable && Math.abs(observedSpread) > 100 ? 'PASS' : !isCalculable ? 'WARN' : 'INFO',
     metrics: [
       { label: 'Current Spread (S_t)', value: `₹${observedSpread.toFixed(2)}/10g`, note: `${symbolA} − ${symbolB}` },
-      { label: 'Historical Mean Spread', value: `₹${historicalMean.toFixed(2)}/10g` },
-      { label: 'Spread Volatility (σ)', value: `₹${historicalStdDev.toFixed(2)}/10g` },
-      { label: 'Statistical Z-Score', value: `${zScore.toFixed(2)}σ` }
+      { label: 'Historical Mean Spread', value: isCalculable ? `₹${historicalMean.toFixed(2)}/10g` : 'N/A' },
+      { label: 'Spread Volatility (σ)', value: isCalculable ? `₹${historicalStdDev.toFixed(2)}/10g` : 'N/A' },
+      { label: 'Statistical Z-Score', value: zScoreDisplay }
     ],
-    explanation: `Spread measures price dislocation per 10 grams fine gold. Statistical z-score measures how far the spread has deviated from its trailing rolling mean.`,
+    explanation: isCalculable
+      ? `Spread measures price dislocation per 10 grams fine gold. Statistical z-score measures how far the spread has deviated from its single-provenance baseline.`
+      : `Spread is measurable for settlement date ${tradeDate}. However, time-series statistical dispersion (Z-Score) requires multi-session single-provenance history (${incalculableReason || 'insufficient data'}). Prototype observations cannot be used to calibrate imported records.`,
     auditTrail: [
       `Spread Formula: S_t = Norm(${symbolA}) − Norm(${symbolB}) = ${normA} − ${normB} = ${observedSpread}`,
-      `Rolling Mean: ₹${historicalMean.toFixed(2)} | Rolling StdDev: ₹${historicalStdDev.toFixed(2)}`,
-      `Statistical Z-Score: (${observedSpread} − ${historicalMean}) / ${historicalStdDev || 1} = ${zScore}`
+      isCalculable
+        ? `Rolling Mean: ₹${historicalMean.toFixed(2)} | Rolling StdDev: ₹${historicalStdDev.toFixed(2)}`
+        : `Baseline Statistics: Incalculable (${incalculableReason || 'insufficient history'})`,
+      isCalculable
+        ? `Statistical Z-Score: (${observedSpread} − ${historicalMean}) / ${historicalStdDev || 1} = ${zScore}`
+        : `Provenance Isolation: Statistical window quarantined from disparate datasets.`
     ]
   });
 
