@@ -80,10 +80,10 @@ export function assessDataSufficiency(params: DataSufficiencyParams): DataSuffic
 
   // Quantitative capability thresholds
   const canMeasureSingleDateSpread = contemporaneousPairDates.length >= 1;
-  const canComputeZScore = contemporaneousPairDates.length >= 2;
+  const canComputeZScore = contemporaneousPairDates.length >= 5;
   const canComputeRollingDistribution = contemporaneousPairDates.length >= 5;
   const canRunWalkForwardBacktest = contemporaneousPairDates.length >= 15;
-  const canFormActionableVerdict = contemporaneousPairDates.length >= 5;
+  const canFormActionableVerdict = contemporaneousPairDates.length >= 15;
 
   const reasons: string[] = [];
 
@@ -107,15 +107,15 @@ export function assessDataSufficiency(params: DataSufficiencyParams): DataSuffic
   let sufficiencyStatus: DataSufficiencyAssessment['sufficiencyStatus'] = 'INSUFFICIENT';
   if (contemporaneousPairDates.length >= 20) {
     sufficiencyStatus = 'SUFFICIENT';
-  } else if (contemporaneousPairDates.length >= 2) {
+  } else if (contemporaneousPairDates.length >= 5) {
     sufficiencyStatus = 'PRELIMINARY';
     reasons.push(
-      `Limited time-series distribution: ${contemporaneousPairDates.length} sessions available. Z-score and spread dispersion can be calculated, but statistical significance is preliminary.`
+      `Preliminary historical sample: ${contemporaneousPairDates.length} sessions available. Z-score and rolling spread dispersion can be calculated, but out-of-sample walk-forward validation requires >= 15 sessions (target >= 20 sessions).`
     );
-  } else if (contemporaneousPairDates.length === 1) {
+  } else if (contemporaneousPairDates.length >= 1) {
     sufficiencyStatus = 'INSUFFICIENT';
     reasons.push(
-      `Single-session observation: Pair spread can be evaluated for settlement date ${contemporaneousPairDates[0]}, but multi-session distribution, rolling volatility, and walk-forward validation cannot be computed.`
+      `Insufficient time-series history: ${contemporaneousPairDates.length} session${contemporaneousPairDates.length === 1 ? '' : 's'} available as of ${asOfDate}. Minimum 5 contemporaneous single-provenance sessions required for rolling baseline distribution and Z-score calibration.`
     );
   } else {
     sufficiencyStatus = 'INSUFFICIENT';

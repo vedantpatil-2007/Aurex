@@ -195,7 +195,7 @@ export const RelativeValue: React.FC<RelativeValuePageProps> = ({
             {zScoreAnalysis.isCalculable !== false ? formatINR(meanSpread) : 'N/A'}
           </div>
           <div className="text-[10px] text-slate-400">
-            {zScoreAnalysis.isCalculable !== false ? 'Historical Baseline Mean' : 'Requires >= 2 sessions'}
+            {zScoreAnalysis.isCalculable !== false ? 'Historical Baseline Mean' : 'Requires >= 5 sessions'}
           </div>
         </div>
 
@@ -205,7 +205,7 @@ export const RelativeValue: React.FC<RelativeValuePageProps> = ({
             {zScoreAnalysis.isCalculable !== false ? `₹${spreadVolatility.toFixed(2)}` : 'N/A'}
           </div>
           <div className="text-[10px] text-slate-400">
-            {zScoreAnalysis.isCalculable !== false ? 'Spread Dispersion' : 'Zero Dispersion (Single Bar)'}
+            {zScoreAnalysis.isCalculable !== false ? 'Spread Dispersion' : 'Requires >= 5 sessions'}
           </div>
         </div>
 
@@ -226,7 +226,7 @@ export const RelativeValue: React.FC<RelativeValuePageProps> = ({
               : 'text-slate-400'
           }`}>
             {zScoreAnalysis.isCalculable === false
-              ? (zScoreAnalysis.incalculableReason || 'Insufficient History')
+              ? (zScoreAnalysis.incalculableReason || 'Insufficient History (< 5 Sessions)')
               : Math.abs(currentZScore) >= 1.5
               ? 'RELATIVE-VALUE ANOMALY'
               : 'Normal Range'}
@@ -348,7 +348,7 @@ export const RelativeValue: React.FC<RelativeValuePageProps> = ({
                 zScoreAnalysis.isCalculable !== false ? (
                   `Over the trailing ${rollingWindow} sessions, spread has traded with a mean of ₹${meanSpread.toFixed(2)}/10g and dispersion σ = ₹${spreadVolatility.toFixed(2)}/10g.`
                 ) : (
-                  `Historical baseline mean and dispersion are unavailable because only ${spreadSeries.length} single-provenance trading session is available (minimum 2 required for point dispersion, 10+ recommended for rolling baseline).`
+                  `Historical baseline mean and dispersion are unavailable because only ${spreadSeries.length} single-provenance trading session${spreadSeries.length === 1 ? ' is' : 's are'} available (minimum 5 required for rolling baseline).`
                 )
               }
             </p>
@@ -362,7 +362,7 @@ export const RelativeValue: React.FC<RelativeValuePageProps> = ({
             </div>
             <p className="text-slate-700 leading-relaxed">
               {zScoreAnalysis.isCalculable === false ? (
-                `Instantaneous basis difference of ₹${currentSpread.toFixed(2)}/10g is measurable directly from settlement prices, but statistical deviation (Z-score) is uncalibrated. A statistical dislocation cannot be declared without multi-session historical distribution.`
+                `Instantaneous basis difference of ₹${currentSpread.toFixed(2)}/10g is measurable directly from settlement prices, but statistical deviation (Z-score) is uncalibrated (< 5 sessions). A statistical dislocation cannot be declared without multi-session historical distribution.`
               ) : Math.abs(currentZScore) >= 1.5 ? (
                 `Current z-score of ${currentZScore.toFixed(2)}σ represents a statistically significant basis dislocation. While both contracts reflect gold bullion, differing quotation units, lot sizing, and retail premiums create temporary divergence.`
               ) : (
@@ -394,7 +394,7 @@ export const RelativeValue: React.FC<RelativeValuePageProps> = ({
             </div>
             <p className="text-slate-700 leading-relaxed">
               {zScoreAnalysis.isCalculable === false ? (
-                `Contemporaneous historical depth: at least 2 trading dates are required to calculate spread variance, 5 for rolling distribution, and 15 for out-of-sample walk-forward validation. Intraday L2 order-book quotes are also needed to confirm live fillability.`
+                `Contemporaneous historical depth: at least 5 trading dates are required for rolling statistical baseline, and 15 for out-of-sample walk-forward validation. Intraday L2 order-book quotes are also needed to confirm live fillability.`
               ) : (
                 `Intraday order-book depth and tick-level bid/ask quotes are proxy-estimated from end-of-day settlement bhavcopy volume and open interest. Real-time market execution requires live L2 order book confirmation.`
               )}

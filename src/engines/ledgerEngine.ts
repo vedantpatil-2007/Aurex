@@ -128,28 +128,37 @@ export function buildEdgeSurvivalLedger(params: LedgerGenerationParams): EdgeSur
   });
 
   // STAGE 3: RELATIVE-VALUE MEASUREMENT
-  const zScoreDisplay = isCalculable ? `${zScore > 0 ? '+' : ''}${zScore.toFixed(2)}σ` : `N/A (${incalculableReason || 'Insufficient History'})`;
+  const hasStatisticalBaseline = Boolean(isCalculable);
+  const zScoreDisplay = hasStatisticalBaseline
+    ? `${zScore > 0 ? '+' : ''}${zScore.toFixed(2)}σ`
+    : `N/A (${incalculableReason || 'Insufficient History'})`;
+  const stage3Status = hasStatisticalBaseline && Math.abs(observedSpread) > 100
+    ? 'PASS'
+    : !hasStatisticalBaseline
+    ? 'WARN'
+    : 'INFO';
+
   stages.push({
     stageNumber: 3,
     stageName: 'RELATIVE-VALUE MEASUREMENT',
     headline: `Spread S_t = ₹${observedSpread.toFixed(2)}/10g | Z-Score: ${zScoreDisplay}`,
-    status: isCalculable && Math.abs(observedSpread) > 100 ? 'PASS' : !isCalculable ? 'WARN' : 'INFO',
+    status: stage3Status,
     metrics: [
       { label: 'Current Spread (S_t)', value: `₹${observedSpread.toFixed(2)}/10g`, note: `${symbolA} − ${symbolB}` },
-      { label: 'Historical Mean Spread', value: isCalculable ? `₹${historicalMean.toFixed(2)}/10g` : 'N/A' },
-      { label: 'Spread Volatility (σ)', value: isCalculable ? `₹${historicalStdDev.toFixed(2)}/10g` : 'N/A' },
+      { label: 'Historical Mean Spread', value: hasStatisticalBaseline ? `₹${historicalMean.toFixed(2)}/10g` : 'N/A' },
+      { label: 'Spread Volatility (σ)', value: hasStatisticalBaseline ? `₹${historicalStdDev.toFixed(2)}/10g` : 'N/A' },
       { label: 'Statistical Z-Score', value: zScoreDisplay }
     ],
-    explanation: isCalculable
+    explanation: hasStatisticalBaseline
       ? `Spread measures price dislocation per 10 grams fine gold. Statistical z-score measures how far the spread has deviated from its single-provenance baseline.`
-      : `Spread is measurable for settlement date ${tradeDate}. However, time-series statistical dispersion (Z-Score) requires multi-session single-provenance history (${incalculableReason || 'insufficient data'}). Prototype observations cannot be used to calibrate imported records.`,
+      : `Current basis spread of ₹${observedSpread.toFixed(2)}/10g is directly observed from settlement prices. However, rolling statistical baseline and Z-score require at least 5 contemporaneous single-provenance sessions (${incalculableReason || 'insufficient data'}). Prototype observations cannot be used to calibrate imported records.`,
     auditTrail: [
       `Spread Formula: S_t = Norm(${symbolA}) − Norm(${symbolB}) = ${normA} − ${normB} = ${observedSpread}`,
-      isCalculable
+      hasStatisticalBaseline
         ? `Rolling Mean: ₹${historicalMean.toFixed(2)} | Rolling StdDev: ₹${historicalStdDev.toFixed(2)}`
-        : `Baseline Statistics: Incalculable (${incalculableReason || 'insufficient history'})`,
-      isCalculable
-        ? `Statistical Z-Score: (${observedSpread} − ${historicalMean}) / ${historicalStdDev || 1} = ${zScore}`
+        : `Baseline Statistics: Incalculable (${incalculableReason || 'Requires >= 5 single-provenance sessions'})`,
+      hasStatisticalBaseline
+        ? `Statistical Z-Score: (${observedSpread} − ${historicalMean}) / ${historicalStdDev || 1} = ${zScore}σ`
         : `Provenance Isolation: Statistical window quarantined from disparate datasets.`
     ]
   });

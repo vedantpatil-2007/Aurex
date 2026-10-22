@@ -19,6 +19,7 @@ describe('AUREX Master Quantitative Integrity & Data Consistency Regression Suit
         { date: '2026-09-01', symbolA: 'GOLDM', symbolB: 'GOLDTEN', priceA: 75000, priceB: 74000, spread: 477.41 - 1087.27, spreadPercentage: 0.1 },
         { date: '2026-09-02', symbolA: 'GOLDM', symbolB: 'GOLDTEN', priceA: 75000, priceB: 74000, spread: 477.41 + 1087.27, spreadPercentage: 0.1 },
         { date: '2026-09-03', symbolA: 'GOLDM', symbolB: 'GOLDTEN', priceA: 75000, priceB: 74000, spread: 477.41, spreadPercentage: 0.1 },
+        { date: '2026-09-03b', symbolA: 'GOLDM', symbolB: 'GOLDTEN', priceA: 75000, priceB: 74000, spread: 477.41, spreadPercentage: 0.1 },
         { date: '2026-09-04', symbolA: 'GOLDM', symbolB: 'GOLDTEN', priceA: 75000, priceB: 74000, spread: -751.08, spreadPercentage: 0.1 }
       ];
 
@@ -53,11 +54,13 @@ describe('AUREX Master Quantitative Integrity & Data Consistency Regression Suit
       expect(emptyAnalysis.isCalculable).toBe(false);
       expect(emptyAnalysis.incalculableReason).toBe('Spread series is empty');
 
-      // Zero dispersion (all spreads identical)
+      // Zero dispersion (all spreads identical with N >= 5)
       const identicalPoints: RelativeValueSpreadPoint[] = [
         { date: '2026-09-01', symbolA: 'GOLDM', symbolB: 'GOLDTEN', priceA: 75000, priceB: 74900, spread: 100, spreadPercentage: 0.13 },
         { date: '2026-09-02', symbolA: 'GOLDM', symbolB: 'GOLDTEN', priceA: 75000, priceB: 74900, spread: 100, spreadPercentage: 0.13 },
-        { date: '2026-09-03', symbolA: 'GOLDM', symbolB: 'GOLDTEN', priceA: 75000, priceB: 74900, spread: 100, spreadPercentage: 0.13 }
+        { date: '2026-09-03', symbolA: 'GOLDM', symbolB: 'GOLDTEN', priceA: 75000, priceB: 74900, spread: 100, spreadPercentage: 0.13 },
+        { date: '2026-09-04', symbolA: 'GOLDM', symbolB: 'GOLDTEN', priceA: 75000, priceB: 74900, spread: 100, spreadPercentage: 0.13 },
+        { date: '2026-09-05', symbolA: 'GOLDM', symbolB: 'GOLDTEN', priceA: 75000, priceB: 74900, spread: 100, spreadPercentage: 0.13 }
       ];
       const zeroDispersionAnalysis = calculateZScore(identicalPoints, 20);
       expect(zeroDispersionAnalysis.isCalculable).toBe(false);

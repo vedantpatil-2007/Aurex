@@ -87,7 +87,7 @@ describe('Cross-Module Data-Mode, Statistical, Contract-Identity & Decision-Gate
       const analysis = calculateZScore(spreadSeries, 20);
       expect(analysis.isCalculable).toBe(false);
       expect(analysis.statisticalStatus).toBe('INSUFFICIENT_HISTORY');
-      expect(analysis.incalculableReason).toContain('Insufficient single-provenance history (1 session available)');
+      expect(analysis.incalculableReason).toContain('Insufficient single-provenance history (1 session available');
 
       // Point zScore and rolling mean in series must be undefined, NOT 0 or artificial point fallback
       expect(analysis.series[0].zScore).toBeUndefined();
@@ -97,6 +97,9 @@ describe('Cross-Module Data-Mode, Statistical, Contract-Identity & Decision-Gate
 
     it('returns zero variance status when all spread observations are identical', () => {
       const mockPoints = [
+        { date: '2026-10-17', symbolA: 'GOLDM', symbolB: 'GOLDTEN', priceA: 145000, priceB: 144900, spread: 100, spreadPercentage: 0.069, provenanceA: 'PROTOTYPE SIMULATION', provenanceB: 'PROTOTYPE SIMULATION' },
+        { date: '2026-10-18', symbolA: 'GOLDM', symbolB: 'GOLDTEN', priceA: 145000, priceB: 144900, spread: 100, spreadPercentage: 0.069, provenanceA: 'PROTOTYPE SIMULATION', provenanceB: 'PROTOTYPE SIMULATION' },
+        { date: '2026-10-19', symbolA: 'GOLDM', symbolB: 'GOLDTEN', priceA: 145000, priceB: 144900, spread: 100, spreadPercentage: 0.069, provenanceA: 'PROTOTYPE SIMULATION', provenanceB: 'PROTOTYPE SIMULATION' },
         { date: '2026-10-20', symbolA: 'GOLDM', symbolB: 'GOLDTEN', priceA: 145000, priceB: 144900, spread: 100, spreadPercentage: 0.069, provenanceA: 'PROTOTYPE SIMULATION', provenanceB: 'PROTOTYPE SIMULATION' },
         { date: '2026-10-21', symbolA: 'GOLDM', symbolB: 'GOLDTEN', priceA: 145000, priceB: 144900, spread: 100, spreadPercentage: 0.069, provenanceA: 'PROTOTYPE SIMULATION', provenanceB: 'PROTOTYPE SIMULATION' }
       ] as any;
@@ -374,29 +377,115 @@ describe('Cross-Module Data-Mode, Statistical, Contract-Identity & Decision-Gate
   });
 
   describe('H. Boundary Tier Tests & Quantitative Reconciliation (1, 2, 4, 5, 15 Sessions)', () => {
-    it('boundary tier 1 session: single-date pricing calculable, point variance incalculable (N < 2)', () => {
+    it('boundary tier 1 session: single-date pricing calculable, point variance incalculable (N < 5)', () => {
       const singlePoint = [
         { date: '2026-10-21', symbolA: 'GOLDM', symbolB: 'GOLDTEN', priceA: 145165.24, priceB: 145015.0, spread: 150.24, spreadPercentage: 0.103, provenanceA: 'USER-IMPORTED DATA — SOURCE UNVERIFIED', provenanceB: 'USER-IMPORTED DATA — SOURCE UNVERIFIED' }
       ] as any;
       const z = calculateZScore(singlePoint, 20);
       expect(z.isCalculable).toBe(false);
       expect(z.statisticalStatus).toBe('INSUFFICIENT_HISTORY');
+      expect(z.currentZScore).toBe(0);
+
+      const obs1: NormalizedObservation[] = [
+        { date: '2026-10-21', symbol: 'GOLDM', expiryDate: '2026-11-05', daysToExpiry: 15, open: 144000, high: 145000, low: 143500, close: 144584, volume: 26000, openInterest: 50700, normalizedPrice: 145165.24, provenance: 'USER-IMPORTED DATA — SOURCE UNVERIFIED' },
+        { date: '2026-10-21', symbol: 'GOLDTEN', expiryDate: '2026-11-05', daysToExpiry: 15, open: 144500, high: 145200, low: 144000, close: 145015, volume: 11500, openInterest: 27900, normalizedPrice: 145015.00, provenance: 'USER-IMPORTED DATA — SOURCE UNVERIFIED' }
+      ] as any;
+
+      const suff = assessDataSufficiency({ observations: obs1, pair: ['GOLDM', 'GOLDTEN'], asOfDate: '2026-10-21', dataMode: 'IMPORTED_ONLY' });
+      expect(suff.canMeasureSingleDateSpread).toBe(true);
+      expect(suff.canComputeZScore).toBe(false);
+      expect(suff.canComputeRollingDistribution).toBe(false);
+      expect(suff.canRunWalkForwardBacktest).toBe(false);
+      expect(suff.canFormActionableVerdict).toBe(false);
+
+      const ledger = buildEdgeSurvivalLedger({
+        pair: ['GOLDM', 'GOLDTEN'],
+        obsA: obs1[0],
+        obsB: obs1[1],
+        provenance: 'USER-IMPORTED DATA — SOURCE UNVERIFIED',
+        friction: defaultFriction,
+        historicalMean: z.mean,
+        historicalStdDev: z.standardDeviation,
+        zScore: z.currentZScore,
+        dataSufficiency: suff,
+        isCalculable: z.isCalculable,
+        incalculableReason: z.incalculableReason
+      });
+
+      // Stage 3 must be WARN (insufficient history), NEVER PASS
+      expect(ledger.stages[2].status).toBe('WARN');
+      expect(ledger.stages[2].metrics.find(m => m.label === 'Historical Mean Spread')?.value).toBe('N/A');
+      expect(ledger.stages[2].metrics.find(m => m.label === 'Spread Volatility (σ)')?.value).toBe('N/A');
+      expect(ledger.stages[2].metrics.find(m => m.label === 'Statistical Z-Score')?.value).toContain('N/A');
+      // Valid observed spread remains visible
+      expect(ledger.stages[2].metrics.find(m => m.label === 'Current Spread (S_t)')?.value).toBe('₹150.24/10g');
+      // Stage 8 decision is NO TRADE
+      expect(ledger.decision).toBe('NO TRADE');
     });
 
-    it('boundary tier 2 sessions: point variance calculable (N >= 2), rolling distribution incalculable (N < 5)', () => {
+    it('boundary tier 2 sessions: rolling statistics incalculable (N < 5), Gate 0 blocks trade (verdict NO TRADE)', () => {
       const twoPoints = [
         { date: '2026-10-20', symbolA: 'GOLDM', symbolB: 'GOLDTEN', priceA: 145000, priceB: 144860, spread: 140, spreadPercentage: 0.096, provenanceA: 'USER-IMPORTED DATA — SOURCE UNVERIFIED', provenanceB: 'USER-IMPORTED DATA — SOURCE UNVERIFIED' },
         { date: '2026-10-21', symbolA: 'GOLDM', symbolB: 'GOLDTEN', priceA: 145165, priceB: 145015, spread: 150, spreadPercentage: 0.103, provenanceA: 'USER-IMPORTED DATA — SOURCE UNVERIFIED', provenanceB: 'USER-IMPORTED DATA — SOURCE UNVERIFIED' }
       ] as any;
       const z = calculateZScore(twoPoints, 20);
-      expect(z.isCalculable).toBe(true);
-      expect(z.statisticalStatus).toBe('CALCULABLE');
-      expect(z.mean).toBe(145);
-      expect(z.standardDeviation).toBe(5);
-      expect(z.currentZScore).toBe(1); // (150 - 145) / 5 = +1.00σ
+      expect(z.isCalculable).toBe(false);
+      expect(z.statisticalStatus).toBe('INSUFFICIENT_HISTORY');
+      expect(z.incalculableReason).toContain('minimum 5 required');
+
+      const obs2: NormalizedObservation[] = [
+        { date: '2026-10-20', symbol: 'GOLDM', expiryDate: '2026-11-05', daysToExpiry: 16, open: 144000, high: 145000, low: 143500, close: 145000, volume: 20000, openInterest: 40000, normalizedPrice: 145000, provenance: 'USER-IMPORTED DATA — SOURCE UNVERIFIED' },
+        { date: '2026-10-20', symbol: 'GOLDTEN', expiryDate: '2026-11-05', daysToExpiry: 16, open: 144500, high: 145000, low: 144000, close: 144860, volume: 10000, openInterest: 20000, normalizedPrice: 144860, provenance: 'USER-IMPORTED DATA — SOURCE UNVERIFIED' },
+        { date: '2026-10-21', symbol: 'GOLDM', expiryDate: '2026-11-05', daysToExpiry: 15, open: 144000, high: 145000, low: 143500, close: 145165, volume: 26000, openInterest: 50700, normalizedPrice: 145165, provenance: 'USER-IMPORTED DATA — SOURCE UNVERIFIED' },
+        { date: '2026-10-21', symbol: 'GOLDTEN', expiryDate: '2026-11-05', daysToExpiry: 15, open: 144500, high: 145200, low: 144000, close: 145015, volume: 11500, openInterest: 27900, normalizedPrice: 145015, provenance: 'USER-IMPORTED DATA — SOURCE UNVERIFIED' }
+      ] as any;
+
+      const suff = assessDataSufficiency({ observations: obs2, pair: ['GOLDM', 'GOLDTEN'], asOfDate: '2026-10-21', dataMode: 'IMPORTED_ONLY' });
+      expect(suff.canMeasureSingleDateSpread).toBe(true);
+      expect(suff.canComputeZScore).toBe(false);
+      expect(suff.canComputeRollingDistribution).toBe(false);
+      expect(suff.canFormActionableVerdict).toBe(false);
+
+      const decision = evaluateDecision({
+        pair: ['GOLDM', 'GOLDTEN'],
+        observedSpread: 150,
+        volA: 26000,
+        oiA: 50700,
+        volB: 11500,
+        oiB: 27900,
+        friction: defaultFriction,
+        dataSufficiency: suff,
+        isCalculable: z.isCalculable,
+        incalculableReason: z.incalculableReason
+      });
+
+      // Gate 0 must preserve capital and block trade
+      expect(decision.decision).toBe('NO TRADE');
+      expect(decision.triggerRules.some(r => r.includes('Data Sufficiency Gate Triggered'))).toBe(true);
+
+      const ledger = buildEdgeSurvivalLedger({
+        pair: ['GOLDM', 'GOLDTEN'],
+        obsA: obs2[2],
+        obsB: obs2[3],
+        provenance: 'USER-IMPORTED DATA — SOURCE UNVERIFIED',
+        friction: defaultFriction,
+        historicalMean: z.mean,
+        historicalStdDev: z.standardDeviation,
+        zScore: z.currentZScore,
+        dataSufficiency: suff,
+        isCalculable: z.isCalculable,
+        incalculableReason: z.incalculableReason
+      });
+
+      // Stage 3 must be WARN (never PASS) when baseline is unavailable
+      expect(ledger.stages[2].status).toBe('WARN');
+      expect(ledger.stages[2].metrics.find(m => m.label === 'Historical Mean Spread')?.value).toBe('N/A');
+      expect(ledger.stages[2].metrics.find(m => m.label === 'Spread Volatility (σ)')?.value).toBe('N/A');
+      expect(ledger.stages[2].metrics.find(m => m.label === 'Statistical Z-Score')?.value).toContain('N/A');
+      expect(ledger.decision).toBe('NO TRADE');
     });
 
-    it('boundary tier 4 sessions: point variance calculable, rolling distribution incalculable (N < 5)', () => {
+    it('boundary tier 4 sessions: rolling statistics incalculable (N < 5), Gate 0 blocks trade (verdict NO TRADE)', () => {
       const fourPoints = [
         { date: '2026-10-16', symbolA: 'GOLDM', symbolB: 'GOLDTEN', priceA: 144500, priceB: 144360, spread: 140, spreadPercentage: 0.096, provenanceA: 'USER-IMPORTED DATA — SOURCE UNVERIFIED', provenanceB: 'USER-IMPORTED DATA — SOURCE UNVERIFIED' },
         { date: '2026-10-19', symbolA: 'GOLDM', symbolB: 'GOLDTEN', priceA: 144800, priceB: 144650, spread: 150, spreadPercentage: 0.103, provenanceA: 'USER-IMPORTED DATA — SOURCE UNVERIFIED', provenanceB: 'USER-IMPORTED DATA — SOURCE UNVERIFIED' },
@@ -404,11 +493,24 @@ describe('Cross-Module Data-Mode, Statistical, Contract-Identity & Decision-Gate
         { date: '2026-10-21', symbolA: 'GOLDM', symbolB: 'GOLDTEN', priceA: 145165, priceB: 145015, spread: 150, spreadPercentage: 0.103, provenanceA: 'USER-IMPORTED DATA — SOURCE UNVERIFIED', provenanceB: 'USER-IMPORTED DATA — SOURCE UNVERIFIED' }
       ] as any;
       const z = calculateZScore(fourPoints, 20);
-      expect(z.isCalculable).toBe(true);
-      expect(fourPoints.length < 5).toBe(true);
+      expect(z.isCalculable).toBe(false);
+      expect(z.statisticalStatus).toBe('INSUFFICIENT_HISTORY');
+
+      const decision = evaluateDecision({
+        pair: ['GOLDM', 'GOLDTEN'],
+        observedSpread: 150,
+        volA: 26000,
+        oiA: 50700,
+        volB: 11500,
+        oiB: 27900,
+        friction: defaultFriction,
+        isCalculable: z.isCalculable,
+        incalculableReason: z.incalculableReason
+      });
+      expect(decision.decision).toBe('NO TRADE');
     });
 
-    it('boundary tier 5 sessions: rolling distribution becomes calculable (N >= 5)', () => {
+    it('boundary tier 5 sessions: rolling statistics become calculable (N >= 5), but Gate 0 blocks trade until walk-forward (N < 15)', () => {
       const fivePoints = [
         { date: '2026-10-15', symbolA: 'GOLDM', symbolB: 'GOLDTEN', priceA: 144000, priceB: 143870, spread: 130, spreadPercentage: 0.090, provenanceA: 'USER-IMPORTED DATA — SOURCE UNVERIFIED', provenanceB: 'USER-IMPORTED DATA — SOURCE UNVERIFIED' },
         { date: '2026-10-16', symbolA: 'GOLDM', symbolB: 'GOLDTEN', priceA: 144500, priceB: 144360, spread: 140, spreadPercentage: 0.096, provenanceA: 'USER-IMPORTED DATA — SOURCE UNVERIFIED', provenanceB: 'USER-IMPORTED DATA — SOURCE UNVERIFIED' },
@@ -417,15 +519,75 @@ describe('Cross-Module Data-Mode, Statistical, Contract-Identity & Decision-Gate
         { date: '2026-10-21', symbolA: 'GOLDM', symbolB: 'GOLDTEN', priceA: 145165, priceB: 145015, spread: 150, spreadPercentage: 0.103, provenanceA: 'USER-IMPORTED DATA — SOURCE UNVERIFIED', provenanceB: 'USER-IMPORTED DATA — SOURCE UNVERIFIED' }
       ] as any;
       const z = calculateZScore(fivePoints, 20);
+      // N = 5: Rolling statistics are calculable
       expect(z.isCalculable).toBe(true);
-      expect(fivePoints.length >= 5).toBe(true);
+      expect(z.statisticalStatus).toBe('CALCULABLE');
+      expect(typeof z.mean).toBe('number');
+      expect(z.standardDeviation).toBeGreaterThan(0);
+      expect(typeof z.currentZScore).toBe('number');
+
+      // Create synthetic observations for 5 sessions
+      const obs5: NormalizedObservation[] = [];
+      const dates = ['2026-10-15', '2026-10-16', '2026-10-19', '2026-10-20', '2026-10-21'];
+      dates.forEach((d) => {
+        obs5.push({ date: d, symbol: 'GOLDM', expiryDate: '2026-11-05', daysToExpiry: 15, open: 144000, high: 145000, low: 143500, close: 145000, volume: 20000, openInterest: 40000, normalizedPrice: 145000, provenance: 'USER-IMPORTED DATA — SOURCE UNVERIFIED' } as any);
+        obs5.push({ date: d, symbol: 'GOLDTEN', expiryDate: '2026-11-05', daysToExpiry: 15, open: 144500, high: 145000, low: 144000, close: 144850, volume: 10000, openInterest: 20000, normalizedPrice: 144850, provenance: 'USER-IMPORTED DATA — SOURCE UNVERIFIED' } as any);
+      });
+
+      const suff = assessDataSufficiency({ observations: obs5, pair: ['GOLDM', 'GOLDTEN'], asOfDate: '2026-10-21', dataMode: 'IMPORTED_ONLY' });
+      expect(suff.canComputeRollingDistribution).toBe(true);
+      expect(suff.canComputeZScore).toBe(true);
+      expect(suff.canRunWalkForwardBacktest).toBe(false); // < 15
+      expect(suff.canFormActionableVerdict).toBe(false);  // < 15
+
+      // In Ledger, Stage 3 is now PASS because statistical baseline is available
+      const ledger = buildEdgeSurvivalLedger({
+        pair: ['GOLDM', 'GOLDTEN'],
+        obsA: obs5[8],
+        obsB: obs5[9],
+        provenance: 'USER-IMPORTED DATA — SOURCE UNVERIFIED',
+        friction: defaultFriction,
+        historicalMean: z.mean,
+        historicalStdDev: z.standardDeviation,
+        zScore: z.currentZScore,
+        dataSufficiency: suff,
+        isCalculable: z.isCalculable,
+        incalculableReason: z.incalculableReason
+      });
+      expect(ledger.stages[2].status).toBe('PASS');
+      expect(ledger.stages[2].metrics.find(m => m.label === 'Historical Mean Spread')?.value).not.toBe('N/A');
+
+      // However, final decision must remain NO TRADE because walk-forward requirement (15 sessions) is not satisfied
+      expect(ledger.decision).toBe('NO TRADE');
+      expect(ledger.stages[7].headline).toBe('System Verdict: NO TRADE');
+
+      const decision = evaluateDecision({
+        pair: ['GOLDM', 'GOLDTEN'],
+        observedSpread: 150,
+        volA: 20000,
+        oiA: 40000,
+        volB: 10000,
+        oiB: 20000,
+        friction: defaultFriction,
+        dataSufficiency: suff,
+        isCalculable: z.isCalculable,
+        incalculableReason: z.incalculableReason
+      });
+      expect(decision.decision).toBe('NO TRADE');
+      expect(decision.rationale).toContain('Walk-forward');
     });
 
-    it('boundary tier 15 sessions: walk-forward backtest can form initial warm-up windows', () => {
+    it('boundary tier 15 sessions: walk-forward validation and decision eligibility satisfied', () => {
       const protoObs = marketDataService.getNormalizedHistoricalData({ dataMode: 'PROTOTYPE_ONLY' });
       // Prototype data has 62 sessions >= 15
       const dates = Array.from(new Set(protoObs.map(o => o.date)));
       expect(dates.length).toBeGreaterThanOrEqual(15);
+
+      const suff = assessDataSufficiency({ observations: protoObs, pair: ['GOLDM', 'GOLDTEN'], asOfDate: '2026-10-21', dataMode: 'PROTOTYPE_ONLY' });
+      expect(suff.canComputeRollingDistribution).toBe(true);
+      expect(suff.canComputeZScore).toBe(true);
+      expect(suff.canRunWalkForwardBacktest).toBe(true);
+      expect(suff.canFormActionableVerdict).toBe(true);
 
       const backtest = runWalkForwardBacktest(protoObs, {
         pair: ['GOLDM', 'GOLDTEN'],
@@ -438,6 +600,22 @@ describe('Cross-Module Data-Mode, Statistical, Contract-Identity & Decision-Gate
       });
       expect(backtest.totalAvailableDates).toBeGreaterThanOrEqual(15);
       expect(backtest.dataSufficiencyWarning).toBeUndefined();
+
+      // Gate 0 is satisfied for 15+ sessions
+      const decision = evaluateDecision({
+        pair: ['GOLDM', 'GOLDTEN'],
+        observedSpread: 250, // large spread
+        volA: 30000,
+        oiA: 60000,
+        volB: 15000,
+        oiB: 35000,
+        friction: defaultFriction,
+        dataSufficiency: suff,
+        isCalculable: true
+      });
+      // Survives Gate 0 and evaluates on net defensible edge
+      expect(decision.triggerRules.some(r => r.includes('Data Sufficiency Gate Triggered'))).toBe(false);
+      expect(decision.decision).toBe('ACTIONABLE');
     });
 
     it('reconciles Decision Engine and Edge Survival Ledger to identical verdict and net edge', () => {
@@ -496,6 +674,73 @@ describe('Cross-Module Data-Mode, Statistical, Contract-Identity & Decision-Gate
         isCalculable: false
       });
       expect(decision1).toEqual(decision2);
+    });
+
+    it('with a two-session imported dataset, Gate 0 preserves capital and produces final verdict NO TRADE', () => {
+      marketDataService.importFromCsv(sample24RowBhavcopyCsv, 'BhavCopyDateWise_21102026.csv');
+      // Ingest a second date
+      const secondDateCsv = sample24RowBhavcopyCsv.replace(/21 Oct 2026/g, '20 Oct 2026');
+      marketDataService.importFromCsv(secondDateCsv, 'BhavCopyDateWise_20102026.csv');
+
+      const importedObs = marketDataService.getNormalizedHistoricalData({ dataMode: 'IMPORTED_ONLY' });
+      const dates = Array.from(new Set(importedObs.map(o => o.date))).sort();
+      expect(dates).toHaveLength(2);
+
+      const seriesA = importedObs.filter(o => o.symbol === 'GOLDM');
+      const seriesB = importedObs.filter(o => o.symbol === 'GOLDTEN');
+      const spreadPoints = buildPairSpreadSeries(seriesA, seriesB, 'GOLDM', 'GOLDTEN');
+      expect(spreadPoints).toHaveLength(2);
+
+      // Relative Value: Z-Score must be incalculable
+      const z = calculateZScore(spreadPoints, 20);
+      expect(z.isCalculable).toBe(false);
+      expect(z.statisticalStatus).toBe('INSUFFICIENT_HISTORY');
+
+      // Data Sufficiency: Insufficient for walk-forward and decision
+      const suff = assessDataSufficiency({
+        observations: importedObs,
+        pair: ['GOLDM', 'GOLDTEN'],
+        asOfDate: '2026-10-21',
+        dataMode: 'IMPORTED_ONLY'
+      });
+      expect(suff.canComputeZScore).toBe(false);
+      expect(suff.canFormActionableVerdict).toBe(false);
+
+      // Decision Engine: Gate 0 blocks trade -> NO TRADE
+      const decision = evaluateDecision({
+        pair: ['GOLDM', 'GOLDTEN'],
+        observedSpread: spreadPoints[spreadPoints.length - 1].spread,
+        volA: 26000,
+        oiA: 50700,
+        volB: 11500,
+        oiB: 27900,
+        friction: defaultFriction,
+        dataSufficiency: suff,
+        isCalculable: z.isCalculable,
+        incalculableReason: z.incalculableReason
+      });
+      expect(decision.decision).toBe('NO TRADE');
+      expect(decision.triggerRules.some(r => r.includes('Data Sufficiency Gate Triggered'))).toBe(true);
+
+      // Ledger: Stage 3 is WARN (never PASS), final verdict is NO TRADE
+      const ledger = buildEdgeSurvivalLedger({
+        pair: ['GOLDM', 'GOLDTEN'],
+        obsA: getActiveObservation(importedObs, 'GOLDM', '2026-10-21'),
+        obsB: getActiveObservation(importedObs, 'GOLDTEN', '2026-10-21'),
+        provenance: 'USER-IMPORTED DATA — SOURCE UNVERIFIED',
+        friction: defaultFriction,
+        historicalMean: z.mean,
+        historicalStdDev: z.standardDeviation,
+        zScore: z.currentZScore,
+        dataSufficiency: suff,
+        isCalculable: z.isCalculable,
+        incalculableReason: z.incalculableReason
+      });
+      expect(ledger.stages[2].status).toBe('WARN');
+      expect(ledger.stages[2].metrics.find(m => m.label === 'Historical Mean Spread')?.value).toBe('N/A');
+      expect(ledger.stages[2].metrics.find(m => m.label === 'Spread Volatility (σ)')?.value).toBe('N/A');
+      expect(ledger.stages[2].metrics.find(m => m.label === 'Statistical Z-Score')?.value).toContain('N/A');
+      expect(ledger.decision).toBe('NO TRADE');
     });
   });
 });

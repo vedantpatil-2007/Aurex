@@ -69,7 +69,9 @@ export function evaluateDecision(inputs: DecisionEngineInputs): DecisionResult {
 
   if (isMarketDerived && lacksSufficiency) {
     decision = 'NO TRADE';
-    const reasonDetail = incalculableReason || dataSufficiency?.reasons?.[0] || 'Insufficient historical data to validate statistical distribution';
+    const reasonDetail = isCalculable === false
+      ? (incalculableReason || 'Insufficient historical sessions (< 5 sessions) for calibrated rolling statistical baseline')
+      : (dataSufficiency?.reasons?.[0] || 'Walk-forward validation requires at least 15 sequential sessions');
     rationale = `Theoretical opportunity cannot be validated: ${reasonDetail}. A single-session or isolated observation without established single-provenance spread distribution cannot produce an actionable market execution verdict.`;
     triggerRules.push('Data Sufficiency Gate Triggered: Insufficient historical sessions to validate statistical edge.');
     triggerRules.push('Capital Preservation Rule: Capital preserved — no market orders without statistically verified distribution.');

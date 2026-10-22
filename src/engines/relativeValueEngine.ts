@@ -189,12 +189,12 @@ export function calculateZScore(
   let incalculableReason: string | undefined = undefined;
   let statisticalStatus: StatisticalStatus = 'CALCULABLE';
 
-  if (eligibleSpreads.length < 2) {
+  if (eligibleSpreads.length < 5) {
     isCalculable = false;
     statisticalStatus = 'INSUFFICIENT_HISTORY';
     incalculableReason = targetProv === 'PROTOTYPE SIMULATION'
-      ? 'Insufficient history (< 2 sessions)'
-      : `Insufficient single-provenance history (${eligibleSpreads.length} session available). Statistical calibration cannot cross provenance boundary into prototype simulation.`;
+      ? 'Insufficient history (< 5 sessions for calibrated rolling statistics)'
+      : `Insufficient single-provenance history (${eligibleSpreads.length} session${eligibleSpreads.length === 1 ? '' : 's'} available, minimum 5 required for calibrated rolling statistics). Statistical calibration cannot cross provenance boundary into prototype simulation.`;
   }
 
   // Calculate isolated baseline statistics
@@ -226,7 +226,7 @@ export function calculateZScore(
 
     const windowSlice = singleProvHistory.slice(-rollingWindow).map(p => p.spread);
 
-    if (windowSlice.length < 2) {
+    if (windowSlice.length < 5) {
       return {
         ...point,
         zScore: undefined,

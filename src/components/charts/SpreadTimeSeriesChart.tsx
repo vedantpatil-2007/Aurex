@@ -16,7 +16,7 @@ export const SpreadTimeSeriesChart: React.FC<SpreadTimeSeriesChartProps> = ({
   meanSpread,
   isCalculable = true
 }) => {
-  const isMeanValid = isCalculable !== false && spreadSeries.length >= 2;
+  const isMeanValid = isCalculable !== false && spreadSeries.length >= 5;
 
   return (
     <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">

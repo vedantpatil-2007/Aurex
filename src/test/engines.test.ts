@@ -74,15 +74,17 @@ describe('AUREX Engine Unit Tests (Phase 1 & Phase 2)', () => {
       { date: '2026-09-01', symbolA: 'GOLDM', symbolB: 'GOLDTEN', priceA: 75000, priceB: 74900, spread: 100, spreadPercentage: 0.13 },
       { date: '2026-09-02', symbolA: 'GOLDM', symbolB: 'GOLDTEN', priceA: 75100, priceB: 75000, spread: 100, spreadPercentage: 0.13 },
       { date: '2026-09-03', symbolA: 'GOLDM', symbolB: 'GOLDTEN', priceA: 75200, priceB: 75050, spread: 150, spreadPercentage: 0.20 },
-      { date: '2026-09-04', symbolA: 'GOLDM', symbolB: 'GOLDTEN', priceA: 75250, priceB: 75000, spread: 250, spreadPercentage: 0.33 }
+      { date: '2026-09-04', symbolA: 'GOLDM', symbolB: 'GOLDTEN', priceA: 75250, priceB: 75000, spread: 250, spreadPercentage: 0.33 },
+      { date: '2026-09-05', symbolA: 'GOLDM', symbolB: 'GOLDTEN', priceA: 75300, priceB: 75000, spread: 300, spreadPercentage: 0.40 }
     ] as any;
 
-    const analysis = calculateZScore(points, 4);
-    expect(analysis.mean).toBe(150);
+    const analysis = calculateZScore(points, 5);
+    expect(analysis.isCalculable).toBe(true);
+    expect(analysis.mean).toBe(180);
     expect(analysis.standardDeviation).toBeGreaterThan(0);
     expect(analysis.currentZScore).toBeGreaterThan(0);
     expect(analysis.minSpread).toBe(100);
-    expect(analysis.maxSpread).toBe(250);
+    expect(analysis.maxSpread).toBe(300);
   });
 
   // Test 7: Cost calculation
