@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import * as fs from 'fs';
 import { parseBhavcopyCsv, detectColumnMapping } from '../services/csvParserService';
-import { marketDataService } from '../services/marketDataService';
+import { marketDataService, MarketDataService } from '../services/marketDataService';
 import { normalizePrice, getNormalizationBreakdown } from '../engines/normalizationEngine';
 import { CONTRACT_SPECIFICATIONS } from '../data/contracts';
 
@@ -59,6 +59,8 @@ describe('MCX Bhavcopy Import Integrity & Multi-Date Accumulation Audit', () => 
   });
 
   it('3. distinct trading dates accumulate deterministically in MarketDataService', () => {
+    marketDataService.clearDataset();
+
     const day1Csv = [
       'Date,Instrument Name,Symbol,Expiry Date,Option Type,Strike Price,Open,High,Low,Close,Previous Close,Volume(Lots),Volume(In 000\'s),Value(Lacs),Open Interest(Lots)',
       '"20 Oct 2026","FUTCOM","GOLDM","05NOV2026","-","0","145000.00","145800.00","144500.00","145015.00","144500.00","21000","210.000 GRMS ","30000.00","50000"',
@@ -87,6 +89,8 @@ describe('MCX Bhavcopy Import Integrity & Multi-Date Accumulation Audit', () => 
   });
 
   it('4. duplicate file imports remain idempotent', () => {
+    marketDataService.clearDataset();
+
     const day1Csv = [
       'Date,Instrument Name,Symbol,Expiry Date,Option Type,Strike Price,Open,High,Low,Close,Previous Close,Volume(Lots),Volume(In 000\'s),Value(Lacs),Open Interest(Lots)',
       '"20 Oct 2026","FUTCOM","GOLDM","05NOV2026","-","0","145000.00","145800.00","144500.00","145015.00","144500.00","21000","210.000 GRMS ","30000.00","50000"'
@@ -103,6 +107,8 @@ describe('MCX Bhavcopy Import Integrity & Multi-Date Accumulation Audit', () => 
   });
 
   it('5. conflicting observations are reported and block silent overwriting', () => {
+    marketDataService.clearDataset();
+
     const day1Csv = [
       'Date,Instrument Name,Symbol,Expiry Date,Option Type,Strike Price,Open,High,Low,Close,Previous Close,Volume(Lots),Volume(In 000\'s),Value(Lacs),Open Interest(Lots)',
       '"20 Oct 2026","FUTCOM","GOLDM","05NOV2026","-","0","145000.00","145800.00","144500.00","145015.00","144500.00","21000","210.000 GRMS ","30000.00","50000"'
@@ -152,23 +158,26 @@ describe('MCX Bhavcopy Import Integrity & Multi-Date Accumulation Audit', () => 
     expect(res.validRecords[0].close).toBe(152073);
   });
 
-  it('8. seed/demo records remain separate and are not mixed into imported history', () => {
+  it('8. active simulation records are preserved and merged when importing new history', () => {
     expect(marketDataService.getProvenance()).toBe('PROTOTYPE SIMULATION');
     const simObsCount = marketDataService.getObservations().length;
-    expect(simObsCount).toBeGreaterThan(0);
+    expect(simObsCount).toBe(434);
 
     const importedCsv = [
       'Date,Instrument Name,Symbol,Expiry Date,Option Type,Strike Price,Open,High,Low,Close,Previous Close,Volume(Lots),Volume(In 000\'s),Value(Lacs),Open Interest(Lots)',
-      '"20 Oct 2026","FUTCOM","GOLDM","05NOV2026","-","0","145000.00","145800.00","144500.00","145015.00","144500.00","21000","210.000 GRMS ","30000.00","50000"'
+      '"21 Oct 2026","FUTCOM","GOLDM","05NOV2026","-","0","145000.00","145800.00","144500.00","145015.00","144500.00","21000","210.000 GRMS ","30000.00","50000"'
     ].join('\n');
 
     // Ingest imported file
-    marketDataService.importFromCsv(importedCsv, 'imported.csv');
+    const res = marketDataService.importFromCsv(importedCsv, 'imported.csv');
+    expect(res.mergeAnalysis?.isAccumulating).toBe(true);
+    expect(res.mergeAnalysis?.newlyInsertedCount).toBe(1);
+    expect(res.mergeAnalysis?.projectedTotalRecords).toBe(435);
     expect(marketDataService.getProvenance()).toBe('USER-IMPORTED DATA — SOURCE UNVERIFIED');
-    // Active dataset contains ONLY the imported observation, not the 200+ simulation seed records
-    expect(marketDataService.getObservations()).toHaveLength(1);
+    // Active dataset contains 434 prior simulation records + 1 newly imported record = 435
+    expect(marketDataService.getObservations()).toHaveLength(435);
 
-    // Reverting to simulation restores the simulation seed records
+    // Reverting to simulation restores the calibrated simulation records
     marketDataService.resetToSimulation();
     expect(marketDataService.getProvenance()).toBe('PROTOTYPE SIMULATION');
     expect(marketDataService.getObservations()).toHaveLength(simObsCount);
@@ -221,6 +230,8 @@ describe('MCX Bhavcopy Import Integrity & Multi-Date Accumulation Audit', () => 
     const content20 = fs.readFileSync(file20Path, 'utf8');
     const content22 = fs.readFileSync(file22Path, 'utf8');
 
+    marketDataService.clearDataset();
+
     // Step 1: Ingest 20-Oct-2026 file (24 valid futures rows)
     const res20 = marketDataService.importFromCsv(content20, 'BhavCopyDateWise_20102026.csv');
     expect(res20.validRecords).toHaveLength(24);
@@ -252,5 +263,214 @@ describe('MCX Bhavcopy Import Integrity & Multi-Date Accumulation Audit', () => 
     const obs = marketDataService.getObservations();
     const leakedOptions = obs.filter(o => o.close === 9503.5 || o.close === 957 || o.close === 25812.5);
     expect(leakedOptions).toHaveLength(0);
+  });
+});
+
+/**
+ * Regression Suite: AUREX Historical-Data Ingestion and Merge Workflow
+ * Covers the 5 specific verification scenarios:
+ * 1. 434 existing records + 24 unique records = 458 records with ACCUMULATING status.
+ * 2. Re-importing the 24 records produces 458 records with 0 newly inserted and 24 unchanged duplicates.
+ * 3. Conflicting records on existing composite keys throw without overwriting.
+ * 4. Persistence across page refreshes (simulated page reload).
+ * 5. Ingestion when no dataset exists initializes a 24-record dataset.
+ * 6. Non-gold commodity and option quarantine remains strictly intact.
+ */
+describe('AUREX Historical Ingestion & Merge Workflow Regression Suite', () => {
+  const store = new Map<string, string>();
+  const mockLocalStorage = {
+    getItem: (key: string) => store.get(key) || null,
+    setItem: (key: string, value: string) => { store.set(key, value); },
+    removeItem: (key: string) => { store.delete(key); },
+    clear: () => { store.clear(); }
+  };
+
+  function generate24GoldFuturesCsv(dateStr = '21 Oct 2026'): string {
+    const header = "Date,Instrument Name,Symbol,Expiry Date,Option Type,Strike Price,Open,High,Low,Close,Previous Close,Volume(Lots),Volume(In 000's),Value(Lacs),Open Interest(Lots)";
+    const rows: string[] = [];
+
+    const goldmExpiries = ['05NOV2026', '04DEC2026', '05JAN2027', '05FEB2027', '05MAR2027', '05APR2027'];
+    const goldtenExpiries = ['30OCT2026', '27NOV2026', '31DEC2026', '29JAN2027', '26FEB2027', '26MAR2027'];
+    const guineaExpiries = ['30OCT2026', '27NOV2026', '31DEC2026', '29JAN2027', '26FEB2027', '26MAR2027'];
+    const petalExpiries = ['30OCT2026', '27NOV2026', '31DEC2026', '29JAN2027', '26FEB2027', '26MAR2027'];
+
+    goldmExpiries.forEach((exp, i) => {
+      const base = 144000 + i * 500;
+      rows.push(`"${dateStr}","FUTCOM","GOLDM","${exp}","-","0","${base}.00","${base + 1000}.00","${base - 200}.00","${base + 584}.00","${base + 100}.00","1000","10.000 GRMS ","1500.00","2000"`);
+    });
+
+    goldtenExpiries.forEach((exp, i) => {
+      const base = 145000 + i * 500;
+      rows.push(`"${dateStr}","FUTCOM","GOLDTEN","${exp}","-","0","${base}.00","${base + 800}.00","${base - 100}.00","${base + 400}.00","${base}.00","500","5.000 GRMS ","700.00","1500"`);
+    });
+
+    guineaExpiries.forEach((exp, i) => {
+      const base = 59000 + i * 300;
+      rows.push(`"${dateStr}","FUTCOM","GOLDGUINEA","${exp}","-","0","${base}.00","${base + 400}.00","${base - 100}.00","${base + 200}.00","${base}.00","200","1.600 GRMS ","120.00","600"`);
+    });
+
+    petalExpiries.forEach((exp, i) => {
+      const base = 7400 + i * 50;
+      rows.push(`"${dateStr}","FUTCOM","GOLDPETAL","${exp}","-","0","${base}.00","${base + 60}.00","${base - 20}.00","${base + 30}.00","${base}.00","100","0.100 GRMS ","7.50","400"`);
+    });
+
+    return [header, ...rows].join('\n');
+  }
+
+  beforeEach(() => {
+    store.clear();
+    (globalThis as any).window = { localStorage: mockLocalStorage };
+    (globalThis as any).localStorage = mockLocalStorage;
+    marketDataService.resetToSimulation();
+  });
+
+  it('Scenario 1: 434 existing records + 24 unique records = 458 records with ACCUMULATING status', () => {
+    // 1. Initial active dataset contains 434 simulation records
+    expect(marketDataService.getObservations()).toHaveLength(434);
+    expect(marketDataService.getProvenance()).toBe('PROTOTYPE SIMULATION');
+
+    // 2. Pre-import preview analysis
+    const csv24 = generate24GoldFuturesCsv('21 Oct 2026');
+    const { parseResult, mergeAnalysis } = marketDataService.analyzeImportMerge(csv24, 'BhavCopyDateWise_21102026.csv');
+
+    // Valid futures rows parsed
+    expect(parseResult.validRecords).toHaveLength(24);
+    expect(parseResult.rejectedRows).toHaveLength(0);
+
+    // Merge analysis reflects accumulation into active dataset
+    expect(mergeAnalysis.isAccumulating).toBe(true);
+    expect(mergeAnalysis.validFuturesInSource).toBe(24);
+    expect(mergeAnalysis.newlyInsertedCount).toBe(24);
+    expect(mergeAnalysis.unchangedDuplicatesCount).toBe(0);
+    expect(mergeAnalysis.conflictingCount).toBe(0);
+    // Expected projected size is 434 + 24 = 458
+    expect(mergeAnalysis.projectedTotalRecords).toBe(458);
+
+    // 3. Apply merge
+    marketDataService.importFromCsv(csv24, 'BhavCopyDateWise_21102026.csv');
+
+    // 4. Verify resulting dataset
+    expect(marketDataService.getObservations()).toHaveLength(458);
+    expect(marketDataService.getProvenance()).toBe('USER-IMPORTED DATA — SOURCE UNVERIFIED');
+    expect(marketDataService.getDatasetMetadata().validRows).toBe(458);
+    expect(marketDataService.getDatasetMetadata().storagePersistence).toBe('LOCAL_STORAGE');
+  });
+
+  it('Scenario 2: re-importing the 24 records produces 458 records with 0 newly inserted and 24 unchanged duplicates', () => {
+    const csv24 = generate24GoldFuturesCsv('21 Oct 2026');
+
+    // Ingest first time -> 458
+    marketDataService.importFromCsv(csv24, 'BhavCopyDateWise_21102026.csv');
+    expect(marketDataService.getObservations()).toHaveLength(458);
+
+    // Analyze re-import
+    const reAnalysis = marketDataService.analyzeImportMerge(csv24, 'BhavCopyDateWise_21102026.csv');
+    expect(reAnalysis.mergeAnalysis.isAccumulating).toBe(true);
+    expect(reAnalysis.mergeAnalysis.newlyInsertedCount).toBe(0);
+    expect(reAnalysis.mergeAnalysis.unchangedDuplicatesCount).toBe(24);
+    expect(reAnalysis.mergeAnalysis.conflictingCount).toBe(0);
+    expect(reAnalysis.mergeAnalysis.projectedTotalRecords).toBe(458);
+
+    // Ingest second time -> still 458
+    marketDataService.importFromCsv(csv24, 'BhavCopyDateWise_21102026.csv');
+    expect(marketDataService.getObservations()).toHaveLength(458);
+  });
+
+  it('Scenario 3: conflicting records on existing composite keys throw without overwriting', () => {
+    const csv24 = generate24GoldFuturesCsv('21 Oct 2026');
+    marketDataService.importFromCsv(csv24, 'BhavCopyDateWise_21102026.csv');
+    expect(marketDataService.getObservations()).toHaveLength(458);
+
+    // Create conflicting CSV matching existing composite key GOLDM_2026-10-21_2026-11-05 with different close price
+    const conflictCsv = [
+      "Date,Instrument Name,Symbol,Expiry Date,Option Type,Strike Price,Open,High,Low,Close,Previous Close,Volume(Lots),Volume(In 000's),Value(Lacs),Open Interest(Lots)",
+      '"21 Oct 2026","FUTCOM","GOLDM","05NOV2026","-","0","144000.00","165000.00","143800.00","160000.00","144100.00","26000","260.000 GRMS ","38000.00","50700"'
+    ].join('\n');
+
+    const analysis = marketDataService.analyzeImportMerge(conflictCsv, 'conflict.csv');
+    expect(analysis.mergeAnalysis.conflictingCount).toBe(1);
+    expect(analysis.mergeAnalysis.conflictingObservations[0].symbol).toBe('GOLDM');
+    expect(analysis.mergeAnalysis.conflictingObservations[0].difference).toContain('Close');
+
+    // Attempting import without forceReplace must throw
+    expect(() => {
+      marketDataService.importFromCsv(conflictCsv, 'conflict.csv', undefined, false);
+    }).toThrow(/conflict/i);
+
+    // Dataset remains intact at 458 rows with original close preserved
+    expect(marketDataService.getObservations()).toHaveLength(458);
+    const existingObs = marketDataService.getObservations().find(
+      o => o.symbol === 'GOLDM' && o.date === '2026-10-21' && o.expiryDate === '2026-11-05'
+    );
+    expect(existingObs?.close).toBe(144584);
+  });
+
+  it('Scenario 4: persistence across page refreshes (simulated page reload)', () => {
+    const csv24 = generate24GoldFuturesCsv('21 Oct 2026');
+    marketDataService.importFromCsv(csv24, 'BhavCopyDateWise_21102026.csv');
+    expect(marketDataService.getObservations()).toHaveLength(458);
+
+    // Simulate page reload by creating a fresh MarketDataService instance
+    const reloadedService = new MarketDataService();
+    expect(reloadedService.getObservations()).toHaveLength(458);
+    expect(reloadedService.getProvenance()).toBe('USER-IMPORTED DATA — SOURCE UNVERIFIED');
+    expect(reloadedService.getDatasetMetadata().storagePersistence).toBe('LOCAL_STORAGE');
+    expect(reloadedService.getDatasetMetadata().validRows).toBe(458);
+    expect(reloadedService.hasPersistedData()).toBe(true);
+
+    // Clear local storage control restores prototype simulation
+    reloadedService.clearPersistedData();
+    expect(reloadedService.getObservations()).toHaveLength(434);
+    expect(reloadedService.getProvenance()).toBe('PROTOTYPE SIMULATION');
+    expect(reloadedService.hasPersistedData()).toBe(false);
+  });
+
+  it('Scenario 5: ingestion when no dataset exists initializes a 24-record dataset', () => {
+    // Empty state with 0 records
+    marketDataService.clearDataset();
+    expect(marketDataService.getObservations()).toHaveLength(0);
+
+    const csv24 = generate24GoldFuturesCsv('21 Oct 2026');
+    const { mergeAnalysis } = marketDataService.analyzeImportMerge(csv24, 'init_dataset.csv');
+
+    // When no active dataset exists, analysis shows INITIALIZING status
+    expect(mergeAnalysis.isAccumulating).toBe(false);
+    expect(mergeAnalysis.validFuturesInSource).toBe(24);
+    expect(mergeAnalysis.newlyInsertedCount).toBe(24);
+    expect(mergeAnalysis.unchangedDuplicatesCount).toBe(0);
+    expect(mergeAnalysis.projectedTotalRecords).toBe(24);
+
+    // Ingest into empty state
+    marketDataService.importFromCsv(csv24, 'init_dataset.csv');
+    expect(marketDataService.getObservations()).toHaveLength(24);
+    expect(marketDataService.getProvenance()).toBe('USER-IMPORTED DATA — SOURCE UNVERIFIED');
+    expect(marketDataService.getDatasetMetadata().validRows).toBe(24);
+  });
+
+  it('Scenario 6: non-gold commodity and option quarantine remains intact', () => {
+    const csv24 = generate24GoldFuturesCsv('21 Oct 2026');
+    const mixedRows = [
+      csv24,
+      '"21 Oct 2026","OPTFUT","GOLDM","29OCT2026","CE","135500","","","","9503.50","9503.50","0","0.000 GRMS ","0.00","0"',
+      '"21 Oct 2026","OPTFUT","GOLDM","27NOV2026","CE","152500","","","","957.00","957.00","0","0.000 GRMS ","0.00","1"',
+      '"21 Oct 2026","FUTCOM","SILVER","05DEC2026","-","0","90000.00","91000.00","89500.00","90500.00","90000.00","5000","150.000 KGS ","4500.00","8000"',
+      '"21 Oct 2026","FUTCOM","CRUDEOIL","18NOV2026","-","0","6000.00","6100.00","5950.00","6050.00","6000.00","12000","1200.000 BBL ","7200.00","15000"'
+    ].join('\n');
+
+    const { parseResult, mergeAnalysis } = marketDataService.analyzeImportMerge(mixedRows, 'mixed_bhavcopy.csv');
+    expect(parseResult.validRecords).toHaveLength(24);
+    expect(parseResult.rejectedRows).toHaveLength(4);
+    expect(mergeAnalysis.unsupportedInstrumentCount).toBe(2); // 2 OPTFUT
+    expect(mergeAnalysis.otherRejectedCount).toBe(2); // SILVER + CRUDEOIL
+    expect(mergeAnalysis.newlyInsertedCount).toBe(24);
+    expect(mergeAnalysis.projectedTotalRecords).toBe(434 + 24);
+
+    marketDataService.importFromCsv(mixedRows, 'mixed_bhavcopy.csv');
+    expect(marketDataService.getObservations()).toHaveLength(458);
+
+    // Verify no quarantined options or non-gold commodities leaked into observations
+    const obs = marketDataService.getObservations();
+    const leakedNonGold = obs.filter(o => !['GOLDM', 'GOLDTEN', 'GOLDGUINEA', 'GOLDPETAL'].includes(o.symbol));
+    expect(leakedNonGold).toHaveLength(0);
   });
 });

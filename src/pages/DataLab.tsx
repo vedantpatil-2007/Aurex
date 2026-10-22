@@ -292,7 +292,7 @@ export const DataLab: React.FC<DataLabProps> = ({
             </div>
 
             <div className="text-xs text-slate-700">
-              {metadata.sourceClassification} â€¢ Date Range: {metadata.dateRange.start} to {metadata.dateRange.end} ({metadata.totalRows} observations)
+              {metadata.sourceClassification} • Date Range: {metadata.dateRange.start} to {metadata.dateRange.end} ({metadata.validRows ?? metadata.totalRows} observations)
             </div>
 
             {/* Cryptographic SHA-256 and Storage Persistence Chips */}

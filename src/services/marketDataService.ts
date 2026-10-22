@@ -396,9 +396,7 @@ class MarketDataService {
       knownFileHash
     );
 
-    const isAccumulating =
-      this.provenance === 'USER-IMPORTED DATA — SOURCE UNVERIFIED' ||
-      this.provenance === 'USER-ATTESTED SOURCE — NOT INDEPENDENTLY VERIFIED';
+    const isAccumulating = this.localObservations.length > 0;
 
     const detectedTradingDates = Array.from(
       new Set(parseResult.validRecords.map(r => r.date))
@@ -592,12 +590,13 @@ class MarketDataService {
       this.metadata = {
         ...parseResult.metadata,
         provenance: this.provenance,
+        fileHashSha256: fileHash,
         sourceFiles: [sourceFileEntry],
         isUserAttested: false,
         isVerified: false
       };
     } else {
-      // Accumulate genuinely new observations into existing imported historical dataset
+      // Accumulate genuinely new observations into existing active dataset
       const existingKeys = new Set(this.localObservations.map(o => `${o.symbol}_${o.date}_${o.expiryDate}`));
       const newRecords = parseResult.validRecords.filter(
         o => !existingKeys.has(`${o.symbol}_${o.date}_${o.expiryDate}`)
@@ -626,9 +625,21 @@ class MarketDataService {
       const updatedCoverage = this.recalculateCoverage(mergedRecords);
 
       this.localObservations = mergedRecords;
+
+      // Update provenance: once user data has been merged in,
+      // it is no longer purely prototype simulation
+      if (this.provenance === 'PROTOTYPE SIMULATION' || this.provenance === 'PROTOTYPE SAMPLE — UNVERIFIED SOURCING') {
+        this.provenance = 'USER-IMPORTED DATA — SOURCE UNVERIFIED';
+      }
+
       this.metadata = {
         ...this.metadata,
+        provenance: this.provenance,
         filename: updatedFiles.map(f => f.filename).join(', '),
+        fileHashSha256: fileHash,
+        sourceClassification: this.provenance === 'USER-ATTESTED SOURCE — NOT INDEPENDENTLY VERIFIED'
+          ? 'User-Attested Bhavcopy CSV File (Not Independently Verified)'
+          : 'User-Imported MCX Bhavcopy Dataset',
         validRows: mergedRecords.length,
         totalRows: (this.metadata.totalRows || 0) + parseResult.metadata.totalRows,
         rejectedRows: (this.metadata.rejectedRows || 0) + parseResult.metadata.rejectedRows,
@@ -638,7 +649,11 @@ class MarketDataService {
           end: allDates[allDates.length - 1] || 'N/A'
         },
         contractCoverage: updatedCoverage,
-        sourceFiles: updatedFiles
+        sourceFiles: updatedFiles,
+        knownLimitations: [
+          'User-imported data merged into active dataset.',
+          'Unverified against official exchange archives; trade execution audit required before capital allocation.'
+        ]
       };
     }
 
@@ -780,6 +795,50 @@ class MarketDataService {
     this.metadata = this.buildSimulationMetadata();
     this.emitChange();
   }
+
+  /**
+   * Clears all active market observations and stored persistence,
+   * leaving an empty dataset with 0 records.
+   */
+  public clearDataset(): void {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        localStorage.removeItem(STORAGE_KEY);
+        localStorage.removeItem(METADATA_KEY);
+      } catch (e) {
+        console.warn('Error clearing localStorage:', e);
+      }
+    }
+    this.isPersistedInLocalStorage = false;
+    this.localObservations = [];
+    this.provenance = 'USER-IMPORTED DATA — SOURCE UNVERIFIED';
+    this.metadata = {
+      provenance: this.provenance,
+      filename: 'empty',
+      fileHashSha256: '',
+      sourceUrl: 'https://www.mcxindia.com/market-data/bhavcopy',
+      storagePersistence: 'SESSION_MEMORY',
+      importTimestamp: new Date().toISOString(),
+      totalRows: 0,
+      validRows: 0,
+      rejectedRows: 0,
+      duplicateCount: 0,
+      missingFieldCount: 0,
+      dateRange: { start: 'N/A', end: 'N/A' },
+      contractCoverage: {
+        GOLDM: { count: 0, earliestDate: '', latestDate: '', expiries: [] },
+        GOLDTEN: { count: 0, earliestDate: '', latestDate: '', expiries: [] },
+        GOLDGUINEA: { count: 0, earliestDate: '', latestDate: '', expiries: [] },
+        GOLDPETAL: { count: 0, earliestDate: '', latestDate: '', expiries: [] }
+      },
+      knownLimitations: ['Empty dataset. Ingest Bhavcopy CSV data to initialize analysis.'],
+      sourceClassification: 'Uninitialized / Empty Dataset',
+      isUserAttested: false,
+      isVerified: false
+    };
+    this.emitChange();
+  }
 }
 
+export { MarketDataService };
 export const marketDataService = new MarketDataService();
