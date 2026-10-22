@@ -384,6 +384,7 @@ export function App() {
               selectedDate={selectedDate}
               onSelectDate={setSelectedDate}
               spreadSeries={pairSpreadSeries}
+              dataSufficiency={dataSufficiency}
               onNavigate={handleNavigate}
             />
           )}

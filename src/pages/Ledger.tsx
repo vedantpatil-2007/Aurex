@@ -6,7 +6,8 @@ import {
   DataProvenance,
   RelativeValueSpreadPoint,
   BacktestParameters,
-  BacktestTrade
+  BacktestTrade,
+  DataSufficiencyAssessment
 } from '../types/market';
 import { EdgeSurvivalLedger } from '../components/ledger/EdgeSurvivalLedger';
 import { buildEdgeSurvivalLedger } from '../engines/ledgerEngine';
@@ -48,6 +49,7 @@ interface LedgerPageProps {
   selectedDate: string;
   onSelectDate: (d: string) => void;
   spreadSeries: RelativeValueSpreadPoint[];
+  dataSufficiency?: DataSufficiencyAssessment;
   onNavigate: (page: any) => void;
 }
 
@@ -63,6 +65,7 @@ export const Ledger: React.FC<LedgerPageProps> = ({
   selectedDate,
   onSelectDate,
   spreadSeries,
+  dataSufficiency,
   onNavigate
 }) => {
   const [activeLedgerTab, setActiveLedgerTab] = useState<'edge-survival' | 'performance-attribution'>('edge-survival');
@@ -95,10 +98,11 @@ export const Ledger: React.FC<LedgerPageProps> = ({
       historicalStdDev: zScoreAnalysis.standardDeviation,
       zScore: zScoreAnalysis.currentZScore,
       manualEdgeOverride: manualEdge,
+      dataSufficiency,
       isCalculable: zScoreAnalysis.isCalculable,
       incalculableReason: zScoreAnalysis.incalculableReason
     });
-  }, [selectedPair, obsA, obsB, provenance, friction, zScoreAnalysis, manualEdge]);
+  }, [selectedPair, obsA, obsB, provenance, friction, zScoreAnalysis, manualEdge, dataSufficiency]);
 
   // Workstream 4: Run Walk-Forward Attribution Simulation
   const backtestSummary = useMemo(() => {

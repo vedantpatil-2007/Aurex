@@ -53,7 +53,7 @@ export const CentralDecisionCard: React.FC<CentralDecisionCardProps> = ({
             Pair Intelligence: {pair[0]} <span className="text-slate-400 font-sans font-light">vs</span> {pair[1]}
           </h2>
           <p className="text-xs text-slate-600 mt-1 max-w-xl font-medium">
-            {decisionDescriptions[decision]}
+            {rationale || decisionDescriptions[decision]}
           </p>
         </div>
 

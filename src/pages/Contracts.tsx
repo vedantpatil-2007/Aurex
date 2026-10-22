@@ -5,6 +5,7 @@ import { ExpiryTimelineVisual } from '../components/contracts/ExpiryTimelineVisu
 import { NormalizedComparisonChart } from '../components/charts/NormalizedComparisonChart';
 import { ContractComparabilityCard } from '../components/contracts/ContractComparabilityCard';
 import { FuturesCurveCard } from '../components/termStructure/FuturesCurveCard';
+import { getActiveObservation } from '../engines/relativeValueEngine';
 import { CONTRACT_DELIVERY_RULES } from '../data/contracts';
 import {
   ArrowRight,
@@ -26,15 +27,6 @@ export const Contracts: React.FC<ContractsPageProps> = ({
   onSelectContract,
   onNavigate
 }) => {
-  // Extract latest observation map by symbol
-  const latestBySymbol = useMemo(() => {
-    const map: Partial<Record<ContractSymbol, NormalizedObservation>> = {};
-    for (const obs of observations) {
-      map[obs.symbol] = obs;
-    }
-    return map as Record<ContractSymbol, NormalizedObservation>;
-  }, [observations]);
-
   // Available dates for term structure
   const availableDates = useMemo(() => {
     return Array.from(new Set(observations.map(o => o.date))).sort();
@@ -49,6 +41,16 @@ export const Contracts: React.FC<ContractsPageProps> = ({
       setSelectedCurveDate(availableDates[availableDates.length - 1]);
     }
   }, [availableDates, selectedCurveDate]);
+
+  // Extract latest active near-month observation map by symbol
+  const latestBySymbol = useMemo(() => {
+    const map: Partial<Record<ContractSymbol, NormalizedObservation>> = {};
+    for (const sym of ['GOLDM', 'GOLDTEN', 'GOLDGUINEA', 'GOLDPETAL'] as ContractSymbol[]) {
+      const active = getActiveObservation(observations, sym, selectedCurveDate);
+      if (active) map[sym] = active;
+    }
+    return map as Record<ContractSymbol, NormalizedObservation>;
+  }, [observations, selectedCurveDate]);
 
   return (
     <div className="space-y-6">

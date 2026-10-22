@@ -1,32 +1,31 @@
 # AUREX — Automated Unified Relative-Value Engine for X-Contracts
-> **From raw settlement data to cost-aware contract intelligence.**  
+> **From raw settlement data to cost-aware commodity contract intelligence.**<br />
 > *“Compare correctly. Validate honestly. Act only when the evidence survives costs.”*
 
-[![Hackathon](https://img.shields.io/badge/Hackathon-Hack_in_Hills_'26-amber.svg)](https://hackinhills.com)
-[![Problem Statement](https://img.shields.io/badge/Track-PS03_Commodity_Derivatives_Intelligence-blue.svg)](https://mcxindia.com)
-[![Team](https://img.shields.io/badge/Team-LONEBYTE-slate.svg)](#team-lonebyte)
-[![Tests](https://img.shields.io/badge/Vitest-78%2F78_Passed-emerald.svg)](#testing--verification)
-[![TypeScript](https://img.shields.io/badge/TypeScript-Strict_Checked-blue.svg)](#tech-stack)
-[![Deployment](https://img.shields.io/badge/Live_Deployment-aurex--swart.vercel.app-emerald.svg)](https://aurex-swart.vercel.app)
+[![Team](https://img.shields.io/badge/Team-LONEBYTE-slate.svg)](#15-team-lonebyte)
+[![Tests](https://img.shields.io/badge/Vitest-140%2F140_Passed-emerald.svg)](#9-testing--verification)
+[![TypeScript](https://img.shields.io/badge/TypeScript-Strict_Checked-blue.svg)](#4-technology-stack)
+[![Linter](https://img.shields.io/badge/oxlint-0_Errors-emerald.svg)](#9-testing--verification)
+[![Live Deployment](https://img.shields.io/badge/Production-aurex--swart.vercel.app-emerald.svg)](https://aurex-swart.vercel.app)
 
 ---
 
-## 1. Executive Summary & Problem Statement (PS03)
+## 1. Project Overview
 
-On the **Multi Commodity Exchange of India (MCX)**, four distinct futures contracts represent the same underlying physical gold metal:
-- **GOLDM (Gold Mini)**
-- **GOLDTEN (Gold 10 Grams)**
-- **GOLDGUINEA (Gold Guinea 8 Grams)**
-- **GOLDPETAL (Gold Petal 1 Gram)**
+On the **Multi Commodity Exchange of India (MCX)**, four distinct futures contracts reflect the same underlying physical bullion asset:
+- **GOLDM** (Gold Mini)
+- **GOLDTEN** (Gold 10 Grams)
+- **GOLDGUINEA** (Gold Guinea 8 Grams)
+- **GOLDPETAL** (Gold Petal 1 Gram)
 
-### The Core Problem: Same Metal Does Not Mean Same Contract Economics
-Naively comparing raw settlement marks across these contracts produces false arbitrage illusions due to four structural heterogeneities:
+### The Problem: Same Metal Does Not Mean Same Contract Economics
+Naively comparing raw settlement marks across these contracts creates false arbitrage illusions due to four structural heterogeneities:
 
 1. **Heterogeneous Lot Sizes & Quotation Units**:
-   - `GOLDM`: Trades in **100g lots**, quoted in **₹ per 10g**.
-   - `GOLDTEN`: Trades in **10g lots**, quoted in **₹ per 10g**.
-   - `GOLDGUINEA`: Trades in **8g lots**, quoted in **₹ per 8g**.
-   - `GOLDPETAL`: Trades in **1g lots**, quoted in **₹ per 1g**.
+   - `GOLDM`: Trades in 100g lots, quoted in ₹ per 10g.
+   - `GOLDTEN`: Trades in 10g lots, quoted in ₹ per 10g.
+   - `GOLDGUINEA`: Trades in 8g lots, quoted in ₹ per 8g.
+   - `GOLDPETAL`: Trades in 1g lots, quoted in ₹ per 1g.
 2. **Purity Mismatches**:
    - `GOLDM` settles on a **995 fineness** standard (Ahmedabad/Mumbai delivery basis).
    - `GOLDTEN`, `GOLDGUINEA`, and `GOLDPETAL` settle on **999 fine gold purity**.
@@ -36,274 +35,332 @@ Naively comparing raw settlement marks across these contracts produces false arb
    - Retail contracts (`GOLDPETAL`, `GOLDGUINEA`) exhibit significantly shallower order-book depth and wider bid-ask spreads than institutional `GOLDM`.
    - All MCX gold futures are **Compulsory Physical Delivery** contracts with a mandatory **5-day tender window** carrying delivery margins (up to 25%) and severe delivery failure penalties.
 
-**AUREX** solves these challenges by transforming heterogeneous exchange quotations into a common economic basis, analyzing multi-expiry futures term structures and implied carry yields, screening for liquidity bottleneck constraints, deducting comprehensive transaction costs, enforcing strict contract lifecycle rules, and validating strategy performance through zero look-ahead walk-forward backtesting.
+**AUREX** solves these challenges by transforming heterogeneous exchange quotations into a common economic benchmark (₹ / 10g @ 999 purity), analyzing multi-expiry futures term structures and implied carry yields, screening for liquidity bottleneck constraints, deducting comprehensive transaction costs, enforcing strict contract lifecycle rules, and validating strategy performance through zero look-ahead walk-forward backtesting.
 
 ---
 
-## 2. Core Architecture & System Pipeline
+## 2. Core Capabilities
+
+AUREX is organized into eight integrated quantitative modules:
+
+1. **Contracts Universe & Term Structure**: Inspects structural specifications, discrete expiry horizons, and multi-tenor implied carry rates across MCX gold contracts.
+2. **Precision Normalization**: Converts raw exchange prices into an economically comparable benchmark basis: ₹ per 10 grams at 999 fineness.
+3. **Relative-Value Analytics**: Calculates contemporaneous spread series $S_t$, single-provenance baseline mean $\mu$, dispersion $\sigma$, and statistical $Z$-score dislocation bands.
+4. **Quantitative Validation**: Runs chronological walk-forward out-of-sample backtests with zero look-ahead bias and parameter warm-up quarantines.
+5. **Edge Survival Ledger**: A signature 8-stage auditable ledger decomposing observed relative-value opportunities down to net surviving edge after all fees, slippage, and haircut penalties.
+6. **Cost Waterfall & Stress Lab**: Models two-legged bid-ask crossing slippage, exchange turnover fees, STT/GST, liquidity haircuts, and safety buffers.
+7. **Decision Engine**: Cost-gated execution pipeline enforcing **Gate 0** data-sufficiency rules to prevent unsupported actionable signals on uncalibrated single-day observations.
+8. **Data Lab & Provenance Registry**: Multi-format CSV ingestion, OPTFUT option quarantining, composite-key deduplication, SHA-256 digest auditing, and 3-mode provenance isolation.
+
+---
+
+## 3. Architecture & Data Flow
+
+### Directory Structure
 
 ```
-┌────────────────────────────────────────────────────────────────────────┐
-│                        AUREX ANALYTICAL PIPELINE                       │
-└────────────────────────────────────────────────────────────────────────┘
- [ User-Ingested Bhavcopy CSV / Prototype Simulation ]
-            │
-            ▼
- ┌───────────────────────────────────────┐
- │ Module 01: Sourcing & Provenance      │ ➔ Multi-format date parsing, OPTFUT option quarantine,
- └───────────────────────────────────────┘   multi-date accumulation, SHA-256 fingerprinting, browser localStorage
-            │
-            ▼
- ┌───────────────────────────────────────┐
- │ Module 02: Precision Normalization    │ ➔ Standardizes to ₹ / 10g @ 999 purity basis:
- └───────────────────────────────────────┘   Price_norm = Raw × (10/Q) × (999/P)
-            │
-            ▼
- ┌───────────────────────────────────────┐
- │ Module 03: Term Structure & Carry     │ ➔ Discrete futures curves, simple & compounded carry,
- └───────────────────────────────────────┘   constant-maturity interpolation, roll-down decomposition
-            │
-            ▼
- ┌───────────────────────────────────────┐
- │ Module 04: Contract Comparability     │ ➔ Calendar mismatch detection (DTE), basis screening,
- └───────────────────────────────────────┘   MCX 5-day compulsory delivery tender window enforcement
-            │
-            ▼
- ┌───────────────────────────────────────┐
- │ Module 05: Relative-Value Analytics   │ ➔ Aligned spread S_t, trailing mean, volatility,
- └───────────────────────────────────────┘   Z-Score dislocation bands, and interpretation panel
-            │
-            ▼
- ┌───────────────────────────────────────┐
- │ Module 06: Liquidity & Cost Hurdle    │ ➔ Bottleneck leg volume/OI score, itemized frictions:
- └───────────────────────────────────────┘   slippage, brokerage, STT/GST, haircut, margin buffer
-            │
-            ▼
- ┌───────────────────────────────────────┐
- │ Module 07: Edge Survival Ledger       │ ➔ 8-stage auditable ledger: Opportunity ➔ Surviving Edge
- └───────────────────────────────────────┘   Strict accounting reconciliation (Net = Gross - Costs)
-            │
-            ▼
- ┌───────────────────────────────────────┐
- │ Module 08: Walk-Forward Backtester    │ ➔ Zero look-ahead simulation, 100g physical gold exposure
- └───────────────────────────────────────┘   matching, MTM equity curves, closed trade ledger
-            │
-            ▼
- ┌───────────────────────────────────────┐
- │ Module 09: Trader Intelligence & Gate │ ➔ 3-State Verdict: ACTIONABLE | WATCH | NO TRADE
- └───────────────────────────────────────┘   Internal deduplicated alert drawer & notification bell
+aurex/
+├── public/                     # Static assets (favicons, SVG icons)
+├── src/
+│   ├── assets/                 # Brand assets
+│   ├── components/             # Reusable UI presentation components
+│   │   ├── backtest/           # BacktestDashboard & performance visualizers
+│   │   ├── cards/              # MetricCard, CentralDecisionCard, DecisionBadge
+│   │   ├── charts/             # SpreadTimeSeriesChart, ZScoreBandsChart, etc.
+│   │   ├── common/             # DataHealthPanel & shared badges
+│   │   ├── contracts/          # ExpiryTimelineVisual, ContractComparabilityCard
+│   │   ├── decision/           # FrictionSliders, CostWaterfallChart, StressLab
+│   │   ├── guide/              # ProductArchitectureFlow, StartHereGuide
+│   │   ├── layout/             # Header, Sidebar, PrototypeBanner
+│   │   ├── ledger/             # EdgeSurvivalLedger 8-stage visualizer
+│   │   ├── tables/             # ContractUniverseTable, ContractSnapshotTable
+│   │   └── termStructure/      # FuturesCurveCard & carry yield views
+│   ├── data/                   # Authoritative contract metadata & seed data
+│   │   ├── contracts.ts        # Specifications, delivery rules, lot sizes
+│   │   ├── sampleOfficialBhavcopy.ts # Illustrative reference records
+│   │   ├── seedMarketData.ts   # Calibrated prototype simulation data
+│   │   └── team.ts             # Authoritative LONEBYTE team roster
+│   ├── engines/                # Pure mathematical & analytical engines
+│   │   ├── alertEngine.ts      # Deduplicated notification management
+│   │   ├── attributionEngine.ts# Performance attribution & accounting identity
+│   │   ├── backtestEngine.ts   # Walk-forward backtester (zero look-ahead)
+│   │   ├── comparabilityEngine.ts # Maturity & calendar alignment
+│   │   ├── dataSufficiencyEngine.ts # Sample-size capability gates
+│   │   ├── decisionEngine.ts   # 3-state cost & Gate 0 execution pipeline
+│   │   ├── ledgerEngine.ts     # 8-stage Edge Survival Ledger builder
+│   │   ├── lifecycleEngine.ts  # Compulsory delivery tender window rules
+│   │   ├── liquidityCostEngine.ts # Composite liquidity score & friction waterfall
+│   │   ├── normalizationEngine.ts # Precision unit & purity normalization
+│   │   ├── relativeValueEngine.ts # Spread, active contract selector, Z-score
+│   │   ├── termStructureEngine.ts # Carry yields & roll-down decomposition
+│   │   └── validationEngine.ts # Walk-forward window generator
+│   ├── pages/                  # Top-level view modules (Overview, DataLab, etc.)
+│   ├── services/               # State & IO services
+│   │   ├── csvParserService.ts # Stream tokenization, OPTFUT quarantine, merge
+│   │   └── marketDataService.ts# Central dataset repository & 3-mode manager
+│   ├── test/                   # Automated Vitest suites (140 tests across 11 files)
+│   ├── types/                  # Authoritative TypeScript domain interfaces
+│   └── utils/                  # Formatting, calendar, and data quality helpers
+├── .env.example                # Safe environment variable template
+├── .gitignore                  # Git ignore rules (logs, dist, node_modules, .env)
+├── .oxlintrc.json              # oxlint linter configuration
+├── index.html                  # HTML entry point
+├── package.json                # Project manifest & dependency declarations
+├── vite.config.ts              # Vite configuration with React plugin
+└── tsconfig.json               # TypeScript project reference configuration
+```
+
+### End-to-End Analytical Data Flow
+
+```
+[ MCX Bhavcopy CSV / Simulation ]
+               │
+               ▼
+   [ csvParserService ] ──► Quarantines OPTFUT, cleans tokens, validates schema
+               │
+               ▼
+  [ marketDataService ] ──► Mode isolation (ALL | PROTOTYPE | IMPORTED), localStorage
+               │
+               ├─────────────────────────────────────────┐
+               ▼                                         ▼
+   [ normalizationEngine ]                    [ comparabilityEngine ]
+   ₹ / 10g @ 999 fineness                     DTE & Tender Window Check
+               │                                         │
+               ├─────────────────────────────────────────┘
+               ▼
+   [ relativeValueEngine ] ──► getActiveObservation (near-month liquidity heuristic)
+               │               calculateSpread, single-provenance calculateZScore
+               │
+               ├────────────────────────┬────────────────────────┐
+               ▼                        ▼                        ▼
+     [ decisionEngine ]       [ ledgerEngine ]         [ backtestEngine ]
+     Gate 0 Sufficiency       8-Stage Audit Ledger     Walk-Forward (zero look-ahead)
+     Hurdle & Liquidity       Gross ➔ Friction ➔ Net   MTM Curves & Accounting Bridge
+               │                        │                        │
+               └────────────────────────┼────────────────────────┘
+                                        ▼
+                             [ Central Decision View ]
+                        ACTIONABLE | WATCH | NO TRADE
 ```
 
 ---
 
-## 3. Authoritative Contract Specifications
+## 4. Technology Stack
 
-Authoritative contract specifications based on MCX circulars (including MCX Circular No. `MCX/TRD/134/2025` for GOLDTEN):
+Verified from project dependency manifests (`package.json`, `package-lock.json`):
 
-| Contract Symbol | Trading Lot | Quotation Unit ($Q$) | Fineness ($P$) | Unit Multiplier ($10/Q$) | Purity Multiplier ($999/P$) | Effective Scaling Factor | Settlement Mode | Tender Period Window |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **GOLDM** | 100 g | ₹ per 10 g | 995 ‰ | $\times 1.0000$ | $\times 1.004020$ | $\mathbf{1.004020}$ | Compulsory Physical Delivery | 5 Trading Days |
-| **GOLDTEN** | 10 g | ₹ per 10 g | 999 ‰ | $\times 1.0000$ | $\times 1.000000$ | $\mathbf{1.000000}$ | Compulsory Physical Delivery | 5 Trading Days |
-| **GOLDGUINEA** | 8 g | ₹ per 8 g | 999 ‰ | $\times 1.2500$ | $\times 1.000000$ | $\mathbf{1.250000}$ | Compulsory Physical Delivery | 5 Trading Days |
-| **GOLDPETAL** | 1 g | ₹ per 1 g | 999 ‰ | $\times 10.0000$ | $\times 1.000000$ | $\mathbf{10.000000}$ | Compulsory Physical Delivery | 5 Trading Days |
-
-### Mathematical Normalization Benchmark
-All contract prices are converted to the standard benchmark: **₹ per 10 grams @ 999 purity**:
-$$\text{Price}_{\text{norm}} = \text{Raw Close} \times \left(\frac{10}{\text{Quote Unit (g)}}\right) \times \left(\frac{999}{\text{Purity (‰)}}\right)$$
-
-**Benchmark Normalization Examples**:
-- **GOLDTEN**: $\text{normalizePrice}(74500, 10, 999) = 74500 \times \left(\frac{10}{10}\right) \times \left(\frac{999}{999}\right) = \mathbf{74,500.00}$
-- **GOLDM**: $\text{normalizePrice}(74500, 10, 995) = 74500 \times \left(\frac{10}{10}\right) \times \left(\frac{999}{995}\right) \approx \mathbf{74,799.50}$
-- **GOLDGUINEA**: $\text{normalizePrice}(59600, 8, 999) = 59600 \times \left(\frac{10}{8}\right) \times \left(\frac{999}{999}\right) = \mathbf{74,500.00}$
-- **GOLDPETAL**: $\text{normalizePrice}(7450, 1, 999) = 7450 \times \left(\frac{10}{1}\right) \times \left(\frac{999}{999}\right) = \mathbf{74,500.00}$
+- **Core Framework**: React 19 (`react` ^19.2.8, `react-dom` ^19.2.8)
+- **Language**: TypeScript (~6.0.2) in strict mode
+- **Bundler & Dev Server**: Vite (^8.3.0) with `@vitejs/plugin-react` (^6.1.1)
+- **Styling**: Tailwind CSS (^3.4.17) with PostCSS (^8.4.49) & Autoprefixer (^10.4.20)
+- **Visualization**: Recharts (^3.10.1) for futures curves, spread time series, Z-score bands, and waterfall bridges
+- **Icons**: Lucide React (^1.53.0)
+- **Test Runner**: Vitest (^2.1.8)
+- **Static Analysis**: oxlint (^1.81.0)
 
 ---
 
-## 4. Analytical Modules & Quantitative Methodology
+## 5. Prerequisites
 
-### A. Term Structure, Futures Curves & Implied Carry
-- **Discrete Futures Curves**: Plots normalized observed prices against actual Days to Expiry (DTE) for discrete expiries (Near, Next, Far).
-- **Annualized Simple Carry**:
-  $\text{Carry}_{\text{simple}} = 100 \times \left(\frac{F}{S} - 1\right) \times \left(\frac{365}{\Delta D}\right)$
-- **Annualized Continuously Compounded Carry**:
-  $\text{Carry}_{\text{continuous}} = 100 \times \ln\left(\frac{F}{S}\right) \times \left(\frac{365}{\Delta D}\right)$
-- **Annualized Geometric Compounding (Mathematically Distinct)**:
-  $\text{Carry}_{\text{geometric}} = 100 \times \left[\left(\frac{F}{S}\right)^{\frac{365}{\Delta D}} - 1\right]$
-  *Note: Continuous compounding uses the natural logarithm $\ln(F/S)$, producing slightly lower values than simple carry in contango, whereas geometric compounding models discrete exponential multi-period compounding.*
-- **Constant-Maturity Linear Interpolation**: Reference prices for standard tenors (7D, 14D, 30D, 60D) interpolated strictly within observable bounds. Tenors requiring extrapolation beyond the farthest expiry are explicitly flagged as `OUT_OF_RANGE`.
-- **Roll-Down vs. Curve Shift Decomposition**:
-  $$\Delta P_{\text{total}} = \text{Mechanical Roll-Down} + \text{Curve Shift}$$
-
-### B. Walk-Forward Backtesting Engine
-- **Strict Chronological Simulation**: Iterates day-by-day forward in time ($t_0 \to T$).
-- **Zero Look-Ahead Bias**: Parameter calibration uses exclusively $[t - \text{warmUpDays}, t - 1]$. Future prices, volume, or expiries never leak into decision time $t$ (verified by regression test).
-- **Physical Gold Exposure Matching**: Spread legs are exposure-matched on a **100g physical gold basis** (e.g. 1 lot GOLDM $\leftrightarrow$ 10 lots GOLDTEN $\leftrightarrow$ 100 lots GOLDPETAL), preventing directional exposure imbalance.
-- **Trade Lifecycle**: Models entry triggers, maximum holding period limits, target convergence exit, stop-loss exit, and mandatory tender window forced exit.
-- **Cost Accounting**: Deducts itemized slippage, brokerage, STT, and exchange taxes on both entry and exit legs.
-
-### C. Performance Attribution & Accounting Reconciliation
-- **Factor Attribution**: Decomposes total trading performance into:
-  1. Directional Gold Market Beta drift.
-  2. Relative-Value Spread Convergence Alpha.
-  3. Mechanical Carry Accrual.
-  4. Execution Friction Deductions.
-- **Leg-Level Accounting Identity**:
-  $\text{Gross Realized P\&L} \equiv \text{Leg A P\&L} + \text{Leg B P\&L}$
-  $\text{Net Realized P\&L} \equiv \text{Gross Realized P\&L} - \text{Total Friction Costs}$
-- **Economic Factor Decomposition**:
-  $\text{Gross Realized P\&L} = \text{Relative-Value Spread Alpha} + \text{Directional Gold Beta} + \text{Residual (0.00)}$
-  Where directional beta is isolated from net unhedged physical exposure ($Q_{\text{net}} \times \Delta M$), preventing directional gold price appreciation from being falsely claimed as strategy alpha.
-  The engine verifies $|\text{discrepancy}| \le 0.05$ and surfaces a `VERIFIED (0 Residue)` status badge in the UI.
-- **Waterfall Bridge**: Recharts bar chart decomposing Gross Realized Spread P&L $\to$ Slippage $\to$ Brokerage & Taxes $\to$ Liquidity Haircut $\to$ Safety Buffer $\to$ Net Realized P&L.
-
-### D. Contract Lifecycle & Compulsory Delivery Tender Intelligence
-- Enforces official MCX delivery specifications across all contracts.
-- **5-Trading-Day Tender Window Enforcement**: Strictly prohibits opening new spread positions within **5 trading days** (excluding weekends and MCX gazetted holidays via `exchangeCalendar`) prior to contract expiry. Because holidays and weekends fall between entry and expiry, 5 trading days may span 7–8 calendar days. Forces simulated liquidation of active trades entering tender to eliminate compulsory delivery allocation, delivery margin escalation (up to 25%), and physical default penalties under MCX Circular No. `MCX/TRD/134/2025`.
-- **Listing Effective Dates**: Automatically checks contract inception dates (e.g. GOLDTEN launch effective `2025-04-01`).
-
-### E. Trader Intelligence & Alert Center
-- **3-State Gate Decision System**:
-  - `ACTIONABLE / EXECUTE` (Green): Positive net edge surviving all costs, passing liquidity filters.
-  - `WATCH / MONITOR` (Amber): Spread dislocation present but edge degraded by friction or wide spreads.
-  - `NO TRADE / STAND ASIDE` (Rose): Dislocation fails cost hurdle, tender window blocked, or liquidity score below threshold.
-- **Deduplicated Alert Manager**: In-app notification center tracking state transitions, tender warnings, and cost hurdle alerts with timestamping and rule traceability.
+- **Node.js**: v18.0.0 or higher (Node 20+ LTS recommended)
+- **Package Manager**: npm (v9 or higher)
+- **Modern Web Browser**: Chrome, Edge, Firefox, or Safari supporting modern ECMAScript and Web Crypto API
 
 ---
 
-## 5. Data Provenance & Ingestion Safeguards
+## 6. Installation
 
-AUREX enforces an uncompromised, honest data provenance framework across all views, calculations, and backtests:
+Clone the repository and install dependencies:
 
-1. **`PROTOTYPE SIMULATION`**: Calibrated deterministic simulation based on official MCX PS03 contract parameters and historical gold volatility. Disclosed clearly as synthetic demo data; must never be presented as genuine historical exchange observations.
-2. **`PROTOTYPE SAMPLE — UNVERIFIED SOURCING`**: Bundled 108-row illustrative dataset formatted to the MCX Bhavcopy schema for prototype demonstration and testing.
-3. **`USER-IMPORTED DATA — SOURCE UNVERIFIED`**: User-provided Bhavcopy CSV files ingested and validated for schema, date formats, and OHLC coherence. *A CSV imported by a user does NOT automatically become independently verified official data.*
-4. **`USER-ATTESTED SOURCE — NOT INDEPENDENTLY VERIFIED`**: Ingested datasets where the user has recorded a source assertion. *Recording an attestation is a user assertion and does NOT constitute independent official verification inside AUREX.*
-5. **`OFFICIAL MCX DATA — SOURCE VERIFIED`**: Strictly reserved for authenticated, cryptographically verified exchange settlement feeds where independent official source confirmation exists.
-
-
-### Empirical MCX Bhavcopy Dataset Coverage & Verification Audit
-
-An empirical audit of actual files downloaded from the official MCX Bhavcopy portal (`https://www.mcxindia.com/market-data/bhavcopy`) was conducted:
-
-| Filename | File Size | SHA-256 Digest | Line Count | Trading Date | Supported Futures Rows | Option / Other Rows | Deduplication Status |
-| :--- | :---: | :--- | :---: | :---: | :---: | :---: | :--- |
-| `BhavCopyDateWise_20102026.csv` | 22.8 KB | `61774232ae2337bf94af47eb57edbfdd0a3f4268e2bc46265c51b901db8f88ad` | 169 | 20-Oct-2026 | 24 (6 per contract) | 144 non-gold futures | First authentic date |
-| `BhavCopyDateWise_22102026.csv` | 2.00 MB | `fede0baa182d4a34ffa09a1e4700b048172c04f362cba7926b6cb04cb7d6d3c5` | 16,237 | 21-Oct-2026 | 24 (6 per contract) | 16,212 (748 options + 15,464 other) | Second authentic date |
-| `BhavCopyDateWise_21102026.csv` | 2.00 MB | `fede0baa182d4a34ffa09a1e4700b048172c04f362cba7926b6cb04cb7d6d3c5` | 16,237 | 21-Oct-2026 | 24 | 16,212 | Identical duplicate of `22102026.csv` |
-| `BhavCopyDateWise_13102026.csv` | 2.00 MB | `fede0baa182d4a34ffa09a1e4700b048172c04f362cba7926b6cb04cb7d6d3c5` | 16,237 | 21-Oct-2026 | 24 | 16,212 | Redundant export of preloaded 21-Oct date |
-
-**Coverage & Integrity Findings**:
-1. **Authentic Coverage**: Exactly **2 distinct trading sessions** (20-Oct & 21-Oct-2026), yielding **48 valid historical futures observations** across the four contracts (`GOLDM`, `GOLDTEN`, `GOLDGUINEA`, `GOLDPETAL`) across 6 expiries.
-2. **Quarantine Verification**: 0 option rows leaked into the futures dataset; all 748 `OPTFUT` option records (including the suspicious ₹9,503.50 and ₹957.00 strike premia) were correctly quarantined.
-3. **Statistical Sample Size Caveat**: With 2 authentic trading dates, the walk-forward backtester (which requires $\ge 15$ warm-up sessions for rolling $\mu, \sigma$ calibration) explicitly returns **0 trades** and surfaces a **Sample Size Limitation Notice**. AUREX refuses to invent synthetic data or claim that 2 dates validate strategy profitability.
-4. **Target of 60 Sessions**: Accumulating the 60-session historical validation target requires downloading the remaining daily Bhavcopy CSV files from the MCX archive using the Data Lab instructions. The multi-date accumulator preserves all past dates deterministically in browser `localStorage`.
-
-### Key Data Integrity & Architecture Disclosures
-- **No Automatic Official Verification**: Manual download of a Bhavcopy file from `https://www.mcxindia.com/market-data/bhavcopy` provides real-world context, but uploading the CSV into AUREX does **not** independently verify that the file originated from MCX. AUREX operates without a trusted custodial verification authority; all user-uploaded datasets remain classified as `USER-IMPORTED DATA — SOURCE UNVERIFIED`.
-- **Client-Side Persistence Scope**: Validated market observations are stored locally in the user's browser via `localStorage` (`aurex_imported_dataset_v2`). Browser-local data does **not** automatically synchronize to another browser, device, or user. Clearing browser local storage cleanly reverts the active workspace to the deterministic prototype simulation.
-- **Provenance Transparency in Analytics**: All analytical modules—including Term Structure curves, Relative-Value Z-scores, Cost Waterfalls, Walk-Forward Backtesting, and Attribution—conspicuously display the active dataset's provenance classification and limitations. Backtest and ledger results must be evaluated in the context of their underlying dataset provenance.
-- **Akamai Edge Security Disclosure**: Multi Commodity Exchange of India (MCX) protects its market data portals using Akamai Edge Security / Bot Manager. Direct automated background requests (via `curl`, python `requests`, or headless scrapers) return `HTTP 403 Forbidden` (`Server: AkamaiGHost`). AUREX guides users through manual browser downloads to inspect real market data in the Data Lab.
-- **Deterministic Multi-Date Accumulation**: The import engine dynamically accumulates distinct trading dates into a continuous historical time series (e.g., sequentially importing 20-Oct and 21-Oct yields a multi-day dataset).
-- **Duplicate Idempotency**: Re-importing the same CSV or redundant date records is strictly idempotent—existing identical observations are detected via natural composite keys (`symbol_date_expiryDate`) and skipped without inflating observation counts.
-- **Conflict Prevention (Anti-Tamper)**: If an incoming file contains records with matching contract expiries but divergent settlement prices, AUREX halts ingestion, flags the conflicting fields, and prevents silent overwriting.
-- **Strict FUTCOM vs. OPTFUT Quarantining**: To eliminate false observations, the parser validates contract specification metadata, admitting genuine `FUTCOM` commodity futures while strictly quarantining `OPTFUT` options (identified via non-empty option types `CE`/`PE` or positive strike prices) without using arbitrary price heuristics.
-- **Client-Side Cryptographic Fingerprinting**: Computes SHA-256 digests via the Web Crypto API to ensure file traceability and verifiable checksum records.
-
----
-
-## 6. Tech Stack
-
-- **Framework**: React 19 + TypeScript + Vite
-- **Styling**: Tailwind CSS
-- **Visualization**: Recharts (Futures curves, Z-score bands, Drawdown underwater charts, Waterfall bridge)
-- **Icons**: Lucide React
-- **Test Framework**: Vitest (71 unit tests across 8 test suites, 100% passing)
-- **Linter**: oxlint (0 errors, 103 non-blocking warnings)
-
----
-
-## 7. Quick Start & Local Setup
-
-### Prerequisites
-- Node.js (v18 or higher recommended)
-- npm
-
-### Installation & Launch
 ```bash
-# Clone the repository
 git clone https://github.com/vedantpatil-2007/Aurex.git
 cd Aurex
-
-# Install dependencies
 npm install
-
-# Run development server
-npm run dev
-```
-Open [http://localhost:5173](http://localhost:5173) in your browser.
-
-### Available Scripts
-```bash
-# Run complete test suite (71 tests across 8 test suites)
-npm test
-
-# Run linter (oxlint)
-npm run lint
-
-# Run production build (typecheck + minification)
-npm run build
-
-# Preview production build locally
-npm run preview
 ```
 
 ---
 
-## 8. Testing & Verification
+## 7. Local Execution
 
-AUREX contains 78 automated unit tests across 8 test suites in `src/test/`:
+### Development Server
+```bash
+npm run dev
+```
+Starts the local development server at `http://localhost:5173`. Supports instant Hot Module Replacement (HMR).
+
+### Production Build
+```bash
+npm run build
+```
+Executes TypeScript compilation (`tsc -b`) followed by Vite production bundling. Output is generated in `dist/`.
+
+### Preview Production Build
+```bash
+npm run preview
+```
+Serves the locally built `dist/` directory at `http://localhost:4173` for testing.
+
+---
+
+## 8. Environment Configuration
+
+AUREX is a client-side quantitative decision-support system. No secret API keys, database credentials, or server tokens are required.
+
+A safe template is provided in `.env.example`:
+
+```bash
+# Copy example configuration if needed
+cp .env.example .env
+```
+
+| Variable | Description | Required? | Default |
+| :--- | :--- | :---: | :--- |
+| `VITE_APP_TITLE` | Application title display | Optional | `AUREX` |
+| `VITE_ENABLE_ANALYTICS` | Client analytics flag | Optional | `false` |
+
+---
+
+## 9. Testing & Verification
+
+AUREX maintains 140 automated unit and regression tests across 11 test suites:
+
+```bash
+# Run Vitest test suite
+npm test
+
+# Run linter
+npm run lint
+
+# Run TypeScript compiler check
+npx tsc -b
+
+# Verify formatting and whitespace
+git diff --check
+```
+
+### Test Suite Inventory
 
 | Test Suite | Tests | Verification Scope |
 | :--- | :---: | :--- |
-| `src/test/engines.test.ts` | 17 | Normalization, spread calculation, z-score, cost waterfall, lifecycle stages, decision states |
-| `src/test/round2.test.ts` | 14 | Lot size vs quote unit separation, purity scaling, CSV tokenization, duplicate detection, rejection inspector, benchmark normalization |
-| `src/test/bhavcopyAudit.test.ts` | 11 | OPTFUT option quarantining without price thresholds, FUTCOM acceptance, multi-date accumulation, idempotency, conflict detection, demo separation, GOLDGUINEA 999 purity, authentic MCX multi-date integration |
-| `src/test/termStructure.test.ts` | 8 | Discrete expiry ordering, simple / continuous / geometric carry formulas, contango / backwardation, edge cases, roll-down decomposition identity |
-| `src/test/lifecycle.test.ts` | 9 | 5-trading-day tender window vs calendar days, MCX holiday calendar exclusion, weekend detection, GOLDTEN 2025 launch date check, expired contracts, pair eligibility, missing/invalid expiry metadata |
-| `src/test/attribution.test.ts` | 7 | Leg-level derivations (Leg A + Leg B = Gross), net reconciliation, adverse spread with rising gold market, profitable convergence during gold crash, asymmetric exposure beta isolation, single friction accounting, invalid/missing input defensibility |
-| `src/test/backtest.test.ts` | 6 | Zero look-ahead bias validation, extreme future shock resilience, insufficient sample size warnings, full trade lifecycle, entry/exit cost deductions, portfolio accounting reconciliation |
-| `src/test/alerts.test.ts` | 6 | Alert deduplication, signal generation, signal downgrade/invalidation state transition, tender window critical lifecycle alerts, empty dataset anomaly alerts, unread counter management |
-| **Total** | **78** | **100% Passed (8 Suites, 0 Failures)** |
-
-Execute the suite:
-```bash
-npm test
-```
+| `src/test/crossModuleIntegrity.test.ts` | 22 | Boundary tiers (1, 2, 4, 5, 15 sessions), Gate 0 enforcement, near-month contract selection, Ledger reconciliation, deterministic reproducibility |
+| `src/test/provenanceIsolation.test.ts` | 20 | 3-mode data isolation (`ALL`, `PROTOTYPE_ONLY`, `IMPORTED_ONLY`), statistical boundary quarantine, mode switching |
+| `src/test/engines.test.ts` | 17 | Core normalization, spread calculation, Z-score, cost waterfall, lifecycle stages, decision states |
+| `src/test/bhavcopyAudit.test.ts` | 17 | OPTFUT option quarantining without arbitrary price cuts, FUTCOM acceptance, multi-date accumulation, idempotency, conflict detection |
+| `src/test/masterRepairs.test.ts` | 14 | Formula precision, contract comparability, carry yield mathematics, date synchronization |
+| `src/test/round2.test.ts` | 14 | Lot size vs quote unit separation, purity scaling, CSV tokenization, duplicate detection, rejection inspector |
+| `src/test/lifecycle.test.ts` | 9 | 5-trading-day tender window vs calendar days, MCX holiday calendar exclusion, weekend detection, GOLDTEN launch date check |
+| `src/test/termStructure.test.ts` | 8 | Discrete expiry ordering, simple / continuous / geometric carry formulas, contango / backwardation, roll-down decomposition |
+| `src/test/attribution.test.ts` | 7 | Leg-level derivations (Leg A + Leg B = Gross), net reconciliation, factor decomposition (Beta vs Alpha), zero residue |
+| `src/test/alerts.test.ts` | 6 | Alert deduplication, signal generation, signal downgrade state transition, tender window critical lifecycle alerts |
+| `src/test/backtest.test.ts` | 6 | Zero look-ahead bias validation, sample size limitation warnings, trade lifecycle, cost accounting |
+| **Total** | **140** | **100% Passed (11 Suites, 0 Failures)** |
 
 ---
 
-## 9. Responsive UI & Viewport Verification
+## 10. Quantitative Methodology
 
-All views are fully responsive and verified across key device viewports:
-- **Mobile (375 × 812)**: Collapsible hamburger drawer, stacked metric cards, horizontally scrollable data tables.
-- **Tablet (768 × 1024)**: Responsive 2-column grid layouts, touch-friendly tab navigation.
-- **Laptop (1366 × 768)**: Standard side-by-side analytical panels, responsive chart containers.
-- **Desktop (1920 × 1080)**: Full-width data tables, multi-metric performance dashboard cards.
+### A. Economic Normalization
+All contract prices are converted to a standardized benchmark: **₹ per 10 grams @ 999 fineness**:
+
+$$\text{Price}_{\text{norm}} = \text{Raw Settlement} \times \left(\frac{10}{\text{Quote Unit (g)}}\right) \times \left(\frac{999}{\text{Purity (‰)}}\right)$$
+
+| Contract Symbol | Trading Lot | Quote Unit ($Q$) | Fineness ($P$) | Scaling Factor | Settlement Mode |
+| :--- | :---: | :---: | :---: | :---: | :--- |
+| **GOLDM** | 100 g | ₹ per 10 g | 995 ‰ | $\times 1.004020$ | Compulsory Physical Delivery |
+| **GOLDTEN** | 10 g | ₹ per 10 g | 999 ‰ | $\times 1.000000$ | Compulsory Physical Delivery |
+| **GOLDGUINEA** | 8 g | ₹ per 8 g | 999 ‰ | $\times 1.250000$ | Compulsory Physical Delivery |
+| **GOLDPETAL** | 1 g | ₹ per 1 g | 999 ‰ | $\times 10.000000$ | Compulsory Physical Delivery |
+
+### B. Spread & Z-Score Formulation
+The contemporaneous spread between contract $A$ and contract $B$ is:
+
+$$S_t = \text{Price}_{\text{norm},t}(A) - \text{Price}_{\text{norm},t}(B)$$
+
+The historical $Z$-score measures standard deviations from the historical mean:
+
+$$Z_t = \frac{S_t - \mu}{\sigma}$$
+
+Where:
+- $\mu = \frac{1}{N} \sum_{i=1}^N S_i$ is the single-provenance sample mean.
+- $\sigma = \sqrt{\frac{1}{N} \sum_{i=1}^N (S_i - \mu)^2}$ is the single-provenance sample standard deviation.
+
+### C. Sample Size Sufficiency Tiers
+AUREX enforces four strict mathematical capability tiers:
+1. **Single-Date Pricing ($N \ge 1$)**: Price normalization and instantaneous basis measurement are mathematically well-defined on contemporaneous settlement prices.
+2. **Point Variance ($N \ge 2$)**: Sample dispersion requires at least 2 sessions in the same provenance. If $N < 2$, $\mu, \sigma$ are undefined and return `N/A`.
+3. **Rolling Distribution ($N \ge 5$)**: Statistical dislocation bands require at least 5 single-provenance sessions (target $\ge 20$).
+4. **Walk-Forward Backtesting ($N \ge 15$)**: Chronological backtesting requires $\ge 15$ sessions for initial warm-up windows (target $\ge 60$). If $N < 15$, the backtest returns an explicit sufficiency shortfall warning and 0 trades.
+
+### D. Implied Carry & Futures Term Structure
+- **Simple Annualized Carry**:
+  $$\text{Carry}_{\text{simple}} = 100 \times \left(\frac{F}{S} - 1\right) \times \left(\frac{365}{\Delta D}\right)$$
+- **Continuously Compounded Carry**:
+  $$\text{Carry}_{\text{continuous}} = 100 \times \ln\left(\frac{F}{S}\right) \times \left(\frac{365}{\Delta D}\right)$$
+- **Geometric Carry**:
+  $$\text{Carry}_{\text{geometric}} = 100 \times \left[\left(\frac{F}{S}\right)^{\frac{365}{\Delta D}} - 1\right]$$
+
+### E. Contract Lifecycle & 5-Day Tender Window
+Under SEBI Master Circulars and MCX delivery specifications, all MCX gold futures are subject to **Compulsory Physical Delivery** with a **5-trading-day tender window** prior to expiry. Active positions entering the tender window face delivery margin escalation (up to 25%) and physical delivery allocation. AUREX strictly blocks opening new spread positions within 5 trading days of expiry (accounting for weekends and MCX gazetted holidays via `exchangeCalendar`).
 
 ---
 
-## 10. Team LONEBYTE
+## 11. Data Provenance Framework
 
-| Name | Role | Responsibilities |
+AUREX maintains an explicit 3-mode provenance framework:
+
+1. **`PROTOTYPE_ONLY`**: Restricts data exclusively to calibrated demonstration values (2026-07-15 to 2026-10-08; 434 records across 62 sessions). Disclosed clearly as synthetic demo data; never presented as genuine historical exchange observations.
+2. **`IMPORTED_ONLY`**: Restricts data exclusively to user-imported MCX Bhavcopy CSV records. Multi-session statistical distributions and backtests are transparently gated until additional dates are uploaded.
+3. **`ALL` (Hybrid)**: Retains both datasets in browser storage while enforcing strict provenance boundary segmentation—statistical calibration windows are prohibited from bridging prototype and imported segments.
+
+### Verified Bhavcopy Ingestion Rules
+- **Schema Validation**: Validates 15 standard MCX Bhavcopy columns.
+- **FUTCOM vs OPTFUT**: Quarantines option records (identified via non-empty `Option Type` or positive `Strike Price`) without arbitrary price heuristics.
+- **Idempotency**: Composite natural key (`symbol_date_expiryDate`) prevents duplicate observations on re-importing the same CSV.
+- **Conflict Prevention**: Divergent settlement prices on existing expiries halt automatic merge and require explicit user resolution.
+- **Client Storage Scope**: Stored locally in browser `localStorage`. Browser-local data does not automatically synchronize to another machine or browser profile.
+
+---
+
+## 12. Known Limitations
+
+- **Order Book Depth**: Daily Bhavcopy data provides aggregate volume and open interest as liquidity proxies. Microstructure analysis (L2/L3 order book queues) requires direct broker WebSocket or exchange co-location feeds.
+- **Client-Side Execution**: AUREX runs entirely in the user's web browser. It does not transmit trading orders or execute live market transactions.
+- **Authentic History Span**: Historical Bhavcopy downloads from MCX are protected by Akamai Edge Security (`HTTP 403 Forbidden` for automated scrapers). Accumulating the 60-session validation target requires manual CSV downloads from the MCX portal.
+- **Friction Estimates**: Transaction fees (STT, GST, MCX turnover) and bid-ask slippage are modeled via institutional default assumptions. Actual broker brokerage plans and market conditions may vary.
+
+---
+
+## 13. Interpretation of Verdicts
+
+AUREX evaluates every trade opportunity through an institutional capital-preservation filter:
+
+| Verdict | Color | Definition & Institutional Meaning |
+| :--- | :---: | :--- |
+| **`ACTIONABLE`** | Emerald | Observed relative-value spread exceeds all transaction hurdles (slippage, taxes, haircut, buffer) with confirmed order-book depth and valid single-provenance statistical calibration. *Does not imply guaranteed profitability.* |
+| **`WATCH`** | Amber | A basis divergence exists, but liquidity is borderline or spread stability requires monitoring before committing capital. |
+| **`NO TRADE`** | Rose | **Capital Preserved.** The opportunity fails cost hurdles, violates liquidity filters, enters the 5-day delivery tender window, or lacks sufficient historical calibration (Gate 0). |
+
+---
+
+## 14. Deployment Workflow
+
+- **Hosting Platform**: Vercel Production
+- **Public Production URL**: [https://aurex-swart.vercel.app](https://aurex-swart.vercel.app)
+- **Deployment Pipeline**: Connected directly to the GitHub repository (`https://github.com/vedantpatil-2007/Aurex`). Every push to `main` triggers automated build (`tsc -b && vite build`) and deployment.
+- **Bundle Optimization**: Production assets are minified and hashed for aggressive cache-busting (`/assets/index-[hash].js`).
+
+---
+
+## 15. Team LONEBYTE
+
+| Member | Role | Core Focus |
 | :--- | :--- | :--- |
-| **Vedant Patil** | Lead Quantitative Systems Builder & Full-Stack Engineer | Analytical engines, term structure, backtesting simulation, CSV parser, system architecture |
-| **Dhanashree Vaze** | Quantitative Research & Domain Analysis | MCX derivative contract specifications, tender window delivery rules, carry mathematics |
-| **Vedashree Mhatre** | Financial Systems & Verification | Edge Survival Ledger audit trails, accounting identity verification, walk-forward test integrity |
+| **Vedant Patil** | Quant Systems | System architecture, analytical engines, term structure, backtesting simulation, CSV parser, and release verification |
+| **Vedshree Mhatre** | Quantitative Analysis | Financial systems, Edge Survival Ledger audit trails, accounting identity verification, and walk-forward test integrity |
+| **Dhanashree Vaze** | Domain & Derivatives Research | MCX derivative contract specifications, tender window delivery rules, and carry yield mathematics |
 
 ---
 
-## 11. Known Limitations & Future Work
+## 16. Disclaimer
 
-- **Live Order Book Depth**: Daily Bhavcopy data provides trade volumes and open interest as liquidity proxies. Tick-by-tick order book depth (L2/L3) requires direct exchange co-location or broker WebSocket API access.
-- **External Webhooks**: In a pure client-side SPA, direct external webhook firing would expose webhook URLs and authorization tokens in browser network traffic. External notifications require a dedicated authenticated backend relay proxy.
-- **Historical Data Ingestion & Provenance Scope**: Automated Bhavcopy downloads are blocked by MCX's Akamai Edge Security; manual browser download and local CSV upload is the supported user ingestion pathway. Ingested datasets are stored in browser `localStorage` and classified as `USER-IMPORTED DATA — SOURCE UNVERIFIED`. Manual upload does not constitute independent official exchange verification.
+AUREX is a quantitative decision-support research prototype designed for educational, analytical, and developmental evaluation of commodity derivative relative-value relationships. Simulated performance, walk-forward backtests, and cost-waterfall estimates are model-driven calculations and do not constitute investment advice, trading recommendations, or guarantees of achievable trading returns. Real-world futures trading involves substantial risk of capital loss, margin escalation, and compulsory physical delivery obligations.

@@ -372,4 +372,130 @@ describe('Cross-Module Data-Mode, Statistical, Contract-Identity & Decision-Gate
       expect(LONEBYTE_TEAM[2].name).toBe('Dhanashree Vaze');
     });
   });
+
+  describe('H. Boundary Tier Tests & Quantitative Reconciliation (1, 2, 4, 5, 15 Sessions)', () => {
+    it('boundary tier 1 session: single-date pricing calculable, point variance incalculable (N < 2)', () => {
+      const singlePoint = [
+        { date: '2026-10-21', symbolA: 'GOLDM', symbolB: 'GOLDTEN', priceA: 145165.24, priceB: 145015.0, spread: 150.24, spreadPercentage: 0.103, provenanceA: 'USER-IMPORTED DATA — SOURCE UNVERIFIED', provenanceB: 'USER-IMPORTED DATA — SOURCE UNVERIFIED' }
+      ] as any;
+      const z = calculateZScore(singlePoint, 20);
+      expect(z.isCalculable).toBe(false);
+      expect(z.statisticalStatus).toBe('INSUFFICIENT_HISTORY');
+    });
+
+    it('boundary tier 2 sessions: point variance calculable (N >= 2), rolling distribution incalculable (N < 5)', () => {
+      const twoPoints = [
+        { date: '2026-10-20', symbolA: 'GOLDM', symbolB: 'GOLDTEN', priceA: 145000, priceB: 144860, spread: 140, spreadPercentage: 0.096, provenanceA: 'USER-IMPORTED DATA — SOURCE UNVERIFIED', provenanceB: 'USER-IMPORTED DATA — SOURCE UNVERIFIED' },
+        { date: '2026-10-21', symbolA: 'GOLDM', symbolB: 'GOLDTEN', priceA: 145165, priceB: 145015, spread: 150, spreadPercentage: 0.103, provenanceA: 'USER-IMPORTED DATA — SOURCE UNVERIFIED', provenanceB: 'USER-IMPORTED DATA — SOURCE UNVERIFIED' }
+      ] as any;
+      const z = calculateZScore(twoPoints, 20);
+      expect(z.isCalculable).toBe(true);
+      expect(z.statisticalStatus).toBe('CALCULABLE');
+      expect(z.mean).toBe(145);
+      expect(z.standardDeviation).toBe(5);
+      expect(z.currentZScore).toBe(1); // (150 - 145) / 5 = +1.00σ
+    });
+
+    it('boundary tier 4 sessions: point variance calculable, rolling distribution incalculable (N < 5)', () => {
+      const fourPoints = [
+        { date: '2026-10-16', symbolA: 'GOLDM', symbolB: 'GOLDTEN', priceA: 144500, priceB: 144360, spread: 140, spreadPercentage: 0.096, provenanceA: 'USER-IMPORTED DATA — SOURCE UNVERIFIED', provenanceB: 'USER-IMPORTED DATA — SOURCE UNVERIFIED' },
+        { date: '2026-10-19', symbolA: 'GOLDM', symbolB: 'GOLDTEN', priceA: 144800, priceB: 144650, spread: 150, spreadPercentage: 0.103, provenanceA: 'USER-IMPORTED DATA — SOURCE UNVERIFIED', provenanceB: 'USER-IMPORTED DATA — SOURCE UNVERIFIED' },
+        { date: '2026-10-20', symbolA: 'GOLDM', symbolB: 'GOLDTEN', priceA: 145000, priceB: 144860, spread: 140, spreadPercentage: 0.096, provenanceA: 'USER-IMPORTED DATA — SOURCE UNVERIFIED', provenanceB: 'USER-IMPORTED DATA — SOURCE UNVERIFIED' },
+        { date: '2026-10-21', symbolA: 'GOLDM', symbolB: 'GOLDTEN', priceA: 145165, priceB: 145015, spread: 150, spreadPercentage: 0.103, provenanceA: 'USER-IMPORTED DATA — SOURCE UNVERIFIED', provenanceB: 'USER-IMPORTED DATA — SOURCE UNVERIFIED' }
+      ] as any;
+      const z = calculateZScore(fourPoints, 20);
+      expect(z.isCalculable).toBe(true);
+      expect(fourPoints.length < 5).toBe(true);
+    });
+
+    it('boundary tier 5 sessions: rolling distribution becomes calculable (N >= 5)', () => {
+      const fivePoints = [
+        { date: '2026-10-15', symbolA: 'GOLDM', symbolB: 'GOLDTEN', priceA: 144000, priceB: 143870, spread: 130, spreadPercentage: 0.090, provenanceA: 'USER-IMPORTED DATA — SOURCE UNVERIFIED', provenanceB: 'USER-IMPORTED DATA — SOURCE UNVERIFIED' },
+        { date: '2026-10-16', symbolA: 'GOLDM', symbolB: 'GOLDTEN', priceA: 144500, priceB: 144360, spread: 140, spreadPercentage: 0.096, provenanceA: 'USER-IMPORTED DATA — SOURCE UNVERIFIED', provenanceB: 'USER-IMPORTED DATA — SOURCE UNVERIFIED' },
+        { date: '2026-10-19', symbolA: 'GOLDM', symbolB: 'GOLDTEN', priceA: 144800, priceB: 144650, spread: 150, spreadPercentage: 0.103, provenanceA: 'USER-IMPORTED DATA — SOURCE UNVERIFIED', provenanceB: 'USER-IMPORTED DATA — SOURCE UNVERIFIED' },
+        { date: '2026-10-20', symbolA: 'GOLDM', symbolB: 'GOLDTEN', priceA: 145000, priceB: 144860, spread: 140, spreadPercentage: 0.096, provenanceA: 'USER-IMPORTED DATA — SOURCE UNVERIFIED', provenanceB: 'USER-IMPORTED DATA — SOURCE UNVERIFIED' },
+        { date: '2026-10-21', symbolA: 'GOLDM', symbolB: 'GOLDTEN', priceA: 145165, priceB: 145015, spread: 150, spreadPercentage: 0.103, provenanceA: 'USER-IMPORTED DATA — SOURCE UNVERIFIED', provenanceB: 'USER-IMPORTED DATA — SOURCE UNVERIFIED' }
+      ] as any;
+      const z = calculateZScore(fivePoints, 20);
+      expect(z.isCalculable).toBe(true);
+      expect(fivePoints.length >= 5).toBe(true);
+    });
+
+    it('boundary tier 15 sessions: walk-forward backtest can form initial warm-up windows', () => {
+      const protoObs = marketDataService.getNormalizedHistoricalData({ dataMode: 'PROTOTYPE_ONLY' });
+      // Prototype data has 62 sessions >= 15
+      const dates = Array.from(new Set(protoObs.map(o => o.date)));
+      expect(dates.length).toBeGreaterThanOrEqual(15);
+
+      const backtest = runWalkForwardBacktest(protoObs, {
+        pair: ['GOLDM', 'GOLDTEN'],
+        zScoreEntryThreshold: 1.2,
+        zScoreExitThreshold: 0.0,
+        maxHoldingDays: 12,
+        friction: defaultFriction,
+        warmUpDays: 15,
+        capitalAllocationINR: 1000000
+      });
+      expect(backtest.totalAvailableDates).toBeGreaterThanOrEqual(15);
+      expect(backtest.dataSufficiencyWarning).toBeUndefined();
+    });
+
+    it('reconciles Decision Engine and Edge Survival Ledger to identical verdict and net edge', () => {
+      marketDataService.importFromCsv(sample24RowBhavcopyCsv, 'BhavCopyDateWise_22102026.csv');
+      const importedObs = marketDataService.getNormalizedHistoricalData({ dataMode: 'IMPORTED_ONLY' });
+      const obsA = getActiveObservation(importedObs, 'GOLDM', '2026-10-21');
+      const obsB = getActiveObservation(importedObs, 'GOLDTEN', '2026-10-21');
+
+      const decision = evaluateDecision({
+        pair: ['GOLDM', 'GOLDTEN'],
+        observedSpread: 150.24,
+        volA: obsA?.volume || 0,
+        oiA: obsA?.openInterest || 0,
+        volB: obsB?.volume || 0,
+        oiB: obsB?.openInterest || 0,
+        friction: defaultFriction,
+        isCalculable: false,
+        incalculableReason: 'Insufficient single-provenance history (1 session available).'
+      });
+
+      const ledger = buildEdgeSurvivalLedger({
+        pair: ['GOLDM', 'GOLDTEN'],
+        obsA,
+        obsB,
+        provenance: 'USER-IMPORTED DATA — SOURCE UNVERIFIED',
+        friction: defaultFriction,
+        isCalculable: false,
+        incalculableReason: 'Insufficient single-provenance history (1 session available).'
+      });
+
+      expect(ledger.decision).toBe(decision.decision);
+      expect(ledger.netEdge).toBe(decision.netEdge);
+      expect(ledger.stages[7].headline).toBe(`System Verdict: ${decision.decision}`);
+      expect(ledger.stages[7].explanation).toBe(decision.rationale);
+    });
+
+    it('produces identical deterministic results when called with identical eligible inputs', () => {
+      const decision1 = evaluateDecision({
+        pair: ['GOLDM', 'GOLDTEN'],
+        observedSpread: 150.24,
+        volA: 26000,
+        oiA: 50700,
+        volB: 11500,
+        oiB: 27900,
+        friction: defaultFriction,
+        isCalculable: false
+      });
+      const decision2 = evaluateDecision({
+        pair: ['GOLDM', 'GOLDTEN'],
+        observedSpread: 150.24,
+        volA: 26000,
+        oiA: 50700,
+        volB: 11500,
+        oiB: 27900,
+        friction: defaultFriction,
+        isCalculable: false
+      });
+      expect(decision1).toEqual(decision2);
+    });
+  });
 });

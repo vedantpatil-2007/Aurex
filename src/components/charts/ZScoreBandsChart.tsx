@@ -32,7 +32,7 @@ export const ZScoreBandsChart: React.FC<ZScoreBandsChartProps> = ({
         </div>
         <div className="flex items-center gap-2 text-xs font-mono">
           <span className="text-slate-500 font-sans">Current Z-Score:</span>
-          {isCalculable !== false ? (
+          {isZScoreValid ? (
             <span className={`px-2 py-0.5 rounded font-bold ${
               Math.abs(currentZScore) >= 1.5
                 ? 'bg-amber-100 text-amber-800 border border-amber-300'

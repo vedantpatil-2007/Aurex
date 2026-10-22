@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { NormalizedObservation, ContractSymbol } from '../../types/market';
 import { CONTRACT_SPECIFICATIONS } from '../../data/contracts';
 import { getNormalizationBreakdown } from '../../engines/normalizationEngine';
+import { getActiveObservation } from '../../engines/relativeValueEngine';
 import { formatINR, formatNumber } from '../../utils/formatters';
 import {
   Search,
@@ -36,12 +37,14 @@ export const ContractUniverseTable: React.FC<ContractUniverseTableProps> = ({
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
   const [expandedSymbol, setExpandedSymbol] = useState<ContractSymbol | null>(selectedSymbol);
 
-  // Group latest observations by symbol
+  // Group active near-month observations by symbol
   const latestBySymbol = useMemo(() => {
     const map = new Map<ContractSymbol, NormalizedObservation>();
-    for (const obs of observations) {
-      // Since observations are in chronological order, later ones overwrite
-      map.set(obs.symbol, obs);
+    for (const sym of ALL_SYMBOLS) {
+      const active = getActiveObservation(observations, sym);
+      if (active) {
+        map.set(sym, active);
+      }
     }
     return map;
   }, [observations]);

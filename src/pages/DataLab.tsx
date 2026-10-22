@@ -739,7 +739,7 @@ export const DataLab: React.FC<DataLabProps> = ({
                 Active Dataset Known Constraints:
               </div>
               <ul className="text-xs text-slate-600 space-y-1 list-disc pl-5">
-                {metadata.knownLimitations.map((lim, idx) => (
+                {(activeMetadata.knownLimitations || metadata.knownLimitations).map((lim, idx) => (
                   <li key={idx}>{lim}</li>
                 ))}
               </ul>
