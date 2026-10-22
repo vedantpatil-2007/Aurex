@@ -6,13 +6,19 @@ interface ZScoreBandsChartProps {
   spreadSeries: RelativeValueSpreadPoint[];
   pair: [ContractSymbol, ContractSymbol];
   currentZScore: number;
+  isCalculable?: boolean;
+  incalculableReason?: string;
 }
 
 export const ZScoreBandsChart: React.FC<ZScoreBandsChartProps> = ({
   spreadSeries,
   pair,
-  currentZScore
+  currentZScore,
+  isCalculable = true,
+  incalculableReason
 }) => {
+  const isZScoreValid = isCalculable !== false && spreadSeries.length >= 5;
+
   return (
     <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-100 gap-2">
@@ -26,20 +32,31 @@ export const ZScoreBandsChart: React.FC<ZScoreBandsChartProps> = ({
         </div>
         <div className="flex items-center gap-2 text-xs font-mono">
           <span className="text-slate-500 font-sans">Current Z-Score:</span>
-          <span className={`px-2 py-0.5 rounded font-bold ${
-            Math.abs(currentZScore) >= 1.5 
-              ? 'bg-amber-100 text-amber-800 border border-amber-300' 
-              : 'bg-slate-100 text-slate-800'
-          }`}>
-            {currentZScore > 0 ? '+' : ''}{currentZScore.toFixed(2)} σ
-          </span>
+          {isCalculable !== false ? (
+            <span className={`px-2 py-0.5 rounded font-bold ${
+              Math.abs(currentZScore) >= 1.5
+                ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                : 'bg-slate-100 text-slate-800'
+            }`}>
+              {currentZScore > 0 ? '+' : ''}{currentZScore.toFixed(2)} σ
+            </span>
+          ) : (
+            <span className="px-2 py-0.5 rounded font-bold bg-amber-100 text-amber-900 border border-amber-300">
+              N/A
+            </span>
+          )}
         </div>
       </div>
 
       <div className="h-60 w-full pt-4">
-        {spreadSeries.length < 5 ? (
-          <div className="h-full flex items-center justify-center text-xs text-slate-400">
-            Insufficient observations to calculate z-score.
+        {!isZScoreValid ? (
+          <div className="h-full flex flex-col items-center justify-center text-xs text-slate-600 bg-slate-50 border border-dashed border-slate-200 rounded-lg p-6 text-center space-y-1.5">
+            <div className="font-mono font-bold text-amber-900">
+              {incalculableReason || 'Insufficient observations to calculate rolling Z-score'}
+            </div>
+            <p className="max-w-md text-slate-500 text-[11px] leading-relaxed">
+              Rolling Z-score dispersion bands require at least 5 single-provenance trading sessions ({spreadSeries.length} session available; shortfall: {Math.max(0, 5 - spreadSeries.length)} session{Math.max(0, 5 - spreadSeries.length) === 1 ? '' : 's'}). Single-day observations cannot establish a statistical distribution.
+            </p>
           </div>
         ) : (
           <ResponsiveContainer width="100%" height="100%">

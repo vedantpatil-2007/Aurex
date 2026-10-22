@@ -333,6 +333,8 @@ export function App() {
             <DataLab
               metadata={datasetMetadata}
               provenance={provenance}
+              dataMode={dataMode}
+              onSelectDataMode={handleSelectDataMode}
               onDatasetChanged={() => setDataVersion(v => v + 1)}
               onNavigate={handleNavigate}
             />
@@ -364,6 +366,7 @@ export function App() {
               observations={asOfNormalizedObservations}
               selectedPair={selectedPair}
               onPairChange={setSelectedPair}
+              selectedDate={selectedDate}
               onNavigate={handleNavigate}
             />
           )}
@@ -404,6 +407,7 @@ export function App() {
               manualEdge={manualEdge}
               onManualEdgeChange={setManualEdge}
               calculatedSpread={latestPairSpread}
+              latestData={asOfLatestObservations}
               onNavigate={handleNavigate}
             />
           )}

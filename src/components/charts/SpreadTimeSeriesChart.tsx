@@ -7,13 +7,17 @@ interface SpreadTimeSeriesChartProps {
   spreadSeries: RelativeValueSpreadPoint[];
   pair: [ContractSymbol, ContractSymbol];
   meanSpread: number;
+  isCalculable?: boolean;
 }
 
 export const SpreadTimeSeriesChart: React.FC<SpreadTimeSeriesChartProps> = ({
   spreadSeries,
   pair,
-  meanSpread
+  meanSpread,
+  isCalculable = true
 }) => {
+  const isMeanValid = isCalculable !== false && spreadSeries.length >= 2;
+
   return (
     <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-100 gap-2">
@@ -32,7 +36,7 @@ export const SpreadTimeSeriesChart: React.FC<SpreadTimeSeriesChartProps> = ({
           </div>
           <div className="flex items-center gap-1.5 text-slate-400">
             <span className="w-3 h-0.5 bg-slate-400 stroke-dashed inline-block" />
-            <span>Mean (₹{meanSpread.toFixed(1)})</span>
+            <span>Mean: {isMeanValid ? `₹${meanSpread.toFixed(1)}` : 'N/A'}</span>
           </div>
         </div>
       </div>
@@ -61,12 +65,14 @@ export const SpreadTimeSeriesChart: React.FC<SpreadTimeSeriesChartProps> = ({
                 width={65}
               />
               <ReferenceLine y={0} stroke="#cbd5e1" strokeWidth={1.5} />
-              <ReferenceLine
-                y={meanSpread}
-                stroke="#94a3b8"
-                strokeDasharray="4 4"
-                label={{ value: `Mean: ₹${meanSpread.toFixed(1)}`, position: 'right', fill: '#64748b', fontSize: 10 }}
-              />
+              {isMeanValid && (
+                <ReferenceLine
+                  y={meanSpread}
+                  stroke="#94a3b8"
+                  strokeDasharray="4 4"
+                  label={{ value: `Mean: ₹${meanSpread.toFixed(1)}`, position: 'right', fill: '#64748b', fontSize: 10 }}
+                />
+              )}
               <Tooltip
                 content={({ active, payload, label }) => {
                   if (active && payload && payload.length) {

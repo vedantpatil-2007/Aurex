@@ -2,7 +2,8 @@ import React, { useState, useRef } from 'react';
 import {
   DatasetMetadata,
   DataProvenance,
-  ContractSymbol
+  ContractSymbol,
+  DataMode
 } from '../types/market';
 import { marketDataService } from '../services/marketDataService';
 import { ParseResult, ColumnMapping } from '../services/csvParserService';
@@ -31,6 +32,8 @@ import {
 interface DataLabProps {
   metadata: DatasetMetadata;
   provenance: DataProvenance;
+  dataMode?: DataMode;
+  onSelectDataMode?: (mode: DataMode) => void;
   onDatasetChanged: () => void;
   onNavigate: (page: any) => void;
 }
@@ -38,9 +41,18 @@ interface DataLabProps {
 export const DataLab: React.FC<DataLabProps> = ({
   metadata,
   provenance,
+  dataMode,
+  onSelectDataMode,
   onDatasetChanged,
   onNavigate
 }) => {
+  const effectiveMode = dataMode ?? marketDataService.getActiveDataMode();
+  const activeMetadata = marketDataService.getMetadata(effectiveMode);
+  const totalStoredRecords = marketDataService.getMetadata('ALL').totalRows;
+  const prototypeStoredCount = marketDataService.getMetadata('PROTOTYPE_ONLY').validRows;
+  const importedStoredCount = marketDataService.getMetadata('IMPORTED_ONLY').validRows;
+  const modeDistinctDates = marketDataService.getAvailableDates(effectiveMode);
+  const activeProvenance = activeMetadata.provenance;
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [csvRawText, setCsvRawText] = useState<string>('');
   const [parsePreview, setParsePreview] = useState<ParseResult | null>(null);
@@ -247,29 +259,29 @@ export const DataLab: React.FC<DataLabProps> = ({
 
       {/* Provenance Status Banner with SHA-256 and Persistence */}
       <div className={`p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
-        provenance === 'OFFICIAL MCX DATA — SOURCE VERIFIED'
+        activeProvenance === 'OFFICIAL MCX DATA — SOURCE VERIFIED'
           ? 'bg-emerald-50 border-emerald-300 text-emerald-950'
-          : provenance === 'USER-ATTESTED SOURCE — NOT INDEPENDENTLY VERIFIED'
+          : activeProvenance === 'USER-ATTESTED SOURCE — NOT INDEPENDENTLY VERIFIED'
           ? 'bg-teal-50 border-teal-300 text-teal-950'
-          : provenance === 'HYBRID / MIXED PROVENANCE'
+          : activeProvenance === 'HYBRID / MIXED PROVENANCE'
           ? 'bg-purple-50 border-purple-300 text-purple-950'
-          : provenance === 'USER-IMPORTED DATA — SOURCE UNVERIFIED'
+          : activeProvenance === 'USER-IMPORTED DATA — SOURCE UNVERIFIED'
           ? 'bg-sky-50 border-sky-300 text-sky-950'
-          : provenance === 'PROTOTYPE SAMPLE — UNVERIFIED SOURCING'
+          : activeProvenance === 'PROTOTYPE SAMPLE — UNVERIFIED SOURCING'
           ? 'bg-indigo-50 border-indigo-300 text-indigo-950'
           : 'bg-amber-50 border-amber-300 text-amber-950'
       }`}>
         <div className="flex items-start sm:items-center gap-3">
           <div className={`w-9 h-9 rounded-lg flex items-center justify-center font-bold text-sm shrink-0 mt-0.5 sm:mt-0 ${
-            provenance === 'OFFICIAL MCX DATA — SOURCE VERIFIED'
+            activeProvenance === 'OFFICIAL MCX DATA — SOURCE VERIFIED'
               ? 'bg-emerald-600 text-white'
-              : provenance === 'USER-ATTESTED SOURCE — NOT INDEPENDENTLY VERIFIED'
+              : activeProvenance === 'USER-ATTESTED SOURCE — NOT INDEPENDENTLY VERIFIED'
               ? 'bg-teal-700 text-white'
-              : provenance === 'HYBRID / MIXED PROVENANCE'
+              : activeProvenance === 'HYBRID / MIXED PROVENANCE'
               ? 'bg-purple-700 text-white'
-              : provenance === 'USER-IMPORTED DATA — SOURCE UNVERIFIED'
+              : activeProvenance === 'USER-IMPORTED DATA — SOURCE UNVERIFIED'
               ? 'bg-sky-600 text-white'
-              : provenance === 'PROTOTYPE SAMPLE — UNVERIFIED SOURCING'
+              : activeProvenance === 'PROTOTYPE SAMPLE — UNVERIFIED SOURCING'
               ? 'bg-indigo-600 text-white'
               : 'bg-amber-600 text-white'
           }`}>
@@ -278,52 +290,78 @@ export const DataLab: React.FC<DataLabProps> = ({
           <div className="space-y-1">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs uppercase font-mono font-bold tracking-wider px-2 py-0.5 rounded bg-white/90 border shadow-xs">
-                Active Source: {provenance}
+                Active Source: {activeProvenance}
               </span>
               <span className="text-xs text-slate-600 font-mono">
-                {metadata.filename || 'internal'}
+                {activeMetadata.filename || 'internal'}
               </span>
-              {metadata.isUserAttested && (
+              {activeMetadata.isUserAttested && (
                 <span className="text-[10px] uppercase font-mono font-bold px-1.5 py-0.5 rounded bg-teal-100 text-teal-800 border border-teal-300">
                   User Attested (Unverified)
                 </span>
               )}
-              {metadata.isVerified && (
+              {activeMetadata.isVerified && (
                 <span className="text-[10px] uppercase font-mono font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-300">
                   Independent Audit Passed
                 </span>
               )}
             </div>
 
-            <div className="text-xs text-slate-700">
-              {metadata.sourceClassification} • Date Range: {metadata.dateRange.start} to {metadata.dateRange.end} ({metadata.validRows ?? metadata.totalRows} observations)
+            <div className="text-xs text-slate-700 font-medium flex items-center gap-2 flex-wrap">
+              <span>Mode:</span>
+              <div className="inline-flex rounded-md shadow-xs" role="group">
+                {(['ALL', 'PROTOTYPE_ONLY', 'IMPORTED_ONLY'] as const).map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => {
+                      if (onSelectDataMode) {
+                        onSelectDataMode(m);
+                      } else {
+                        marketDataService.setActiveDataMode(m);
+                        onDatasetChanged();
+                      }
+                    }}
+                    className={`px-2 py-0.5 text-[10px] font-mono font-bold border transition-colors ${
+                      effectiveMode === m
+                        ? 'bg-slate-900 text-white border-slate-900'
+                        : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+                    } ${m === 'ALL' ? 'rounded-l-md' : ''} ${m === 'IMPORTED_ONLY' ? 'rounded-r-md' : ''}`}
+                  >
+                    {m === 'ALL' ? 'All Stored' : m === 'PROTOTYPE_ONLY' ? 'Prototype' : 'Imported Only'}
+                  </button>
+                ))}
+              </div>
+              <span className="text-slate-400">•</span>
+              <span>Date Range: <span className="font-mono font-bold">{activeMetadata.dateRange.start}</span> to <span className="font-mono font-bold">{activeMetadata.dateRange.end}</span> ({activeMetadata.validRows} observations in mode, {modeDistinctDates.length} trading date{modeDistinctDates.length === 1 ? '' : 's'})</span>
             </div>
 
             {/* Discrete Provenance Breakdown Pills */}
-            {metadata.provenanceBreakdown && (
-              <div className="flex items-center gap-2 pt-1 text-[11px] font-mono flex-wrap">
-                <span className="text-slate-500 font-sans font-semibold text-[10px]">Composition:</span>
-                <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-200 text-[10px]">
-                  {metadata.provenanceBreakdown.prototypeSimulationCount} Prototype Simulation
+            <div className="flex items-center gap-2 pt-1 text-[11px] font-mono flex-wrap">
+              <span className="text-slate-500 font-sans font-semibold text-[10px]">Total Stored:</span>
+              <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-800 border border-slate-200 text-[10px] font-bold">
+                {totalStoredRecords} Stored Records
+              </span>
+              <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-200 text-[10px]">
+                {prototypeStoredCount} Prototype Sim
+              </span>
+              <span className="px-2 py-0.5 rounded bg-sky-100 text-sky-900 border border-sky-200 text-[10px]">
+                {importedStoredCount} User-Imported
+              </span>
+              {activeMetadata.rejectedRows > 0 && (
+                <span className="px-2 py-0.5 rounded bg-rose-100 text-rose-900 border border-rose-200 text-[10px]">
+                  {activeMetadata.rejectedRows} Rejected
                 </span>
-                <span className="px-2 py-0.5 rounded bg-sky-100 text-sky-900 border border-sky-200 text-[10px]">
-                  {metadata.provenanceBreakdown.userImportedCount} User-Imported
-                </span>
-                {metadata.provenanceBreakdown.officialVerifiedCount > 0 && (
-                  <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-900 border border-emerald-200 text-[10px]">
-                    {metadata.provenanceBreakdown.officialVerifiedCount} Verified Official
-                  </span>
-                )}
-              </div>
-            )}
+              )}
+            </div>
 
             {/* Cryptographic SHA-256 and Storage Persistence Chips */}
             <div className="flex items-center gap-2 pt-1 flex-wrap">
               <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-white/90 border border-slate-200 text-[10px] font-mono text-slate-700 shadow-xs">
                 <Hash className="w-3 h-3 text-slate-500" />
                 <span>SHA-256:</span>
-                <span className="font-bold text-slate-900 truncate max-w-[140px] sm:max-w-[220px]" title={metadata.fileHashSha256}>
-                  {metadata.fileHashSha256 ? metadata.fileHashSha256.slice(0, 18) + '...' : 'sim_deterministic_seed'}
+                <span className="font-bold text-slate-900 truncate max-w-[140px] sm:max-w-[220px]" title={activeMetadata.fileHashSha256}>
+                  {activeMetadata.fileHashSha256 ? activeMetadata.fileHashSha256.slice(0, 18) + '...' : 'sim_deterministic_seed'}
                 </span>
               </div>
 
@@ -331,21 +369,21 @@ export const DataLab: React.FC<DataLabProps> = ({
                 <HardDrive className="w-3 h-3 text-slate-500" />
                 <span>Storage:</span>
                 <span className="font-bold text-slate-900">
-                  {metadata.storagePersistence || 'SESSION_MEMORY'}
+                  {activeMetadata.storagePersistence || 'SESSION_MEMORY'}
                 </span>
               </div>
             </div>
 
-            {metadata.attestationNotes && (
+            {activeMetadata.attestationNotes && (
               <div className="text-[11px] text-teal-900 font-mono mt-0.5 italic">
-                Attestation: {metadata.attestationNotes} ({metadata.attestationTimestamp?.slice(0, 10)})
+                Attestation: {activeMetadata.attestationNotes} ({activeMetadata.attestationTimestamp?.slice(0, 10)})
               </div>
             )}
           </div>
         </div>
 
         <div className="flex items-center gap-2 flex-wrap self-start sm:self-auto">
-          {(provenance === 'USER-IMPORTED DATA — SOURCE UNVERIFIED' || provenance === 'HYBRID / MIXED PROVENANCE') && (
+          {(activeProvenance === 'USER-IMPORTED DATA — SOURCE UNVERIFIED' || activeProvenance === 'HYBRID / MIXED PROVENANCE') && (
             <button
               onClick={() => setShowAttestationModal(true)}
               className="px-3 py-1.5 bg-teal-700 hover:bg-teal-800 text-white rounded-md text-xs font-mono font-bold shadow-sm transition-colors flex items-center gap-1.5"
@@ -356,7 +394,7 @@ export const DataLab: React.FC<DataLabProps> = ({
             </button>
           )}
 
-          {provenance === 'USER-ATTESTED SOURCE — NOT INDEPENDENTLY VERIFIED' && (
+          {activeProvenance === 'USER-ATTESTED SOURCE — NOT INDEPENDENTLY VERIFIED' && (
             <button
               onClick={handleRevokeAttestation}
               className="px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-md text-xs font-mono font-medium shadow-sm transition-colors flex items-center gap-1.5"
@@ -518,7 +556,7 @@ export const DataLab: React.FC<DataLabProps> = ({
           }`}
         >
           <Database className="w-4 h-4" />
-          <span>Active Dataset Coverage ({metadata.validRows} rows)</span>
+          <span>Active Dataset Coverage ({activeMetadata.validRows} rows in {effectiveMode})</span>
         </button>
 
         {parsePreview && (
@@ -556,10 +594,10 @@ export const DataLab: React.FC<DataLabProps> = ({
           <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
             <div className="p-4 bg-slate-50 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-slate-700">
-                Discrete Contract Coverage Matrix
+                Discrete Contract Coverage Matrix ({effectiveMode})
               </h3>
               <span className="text-[11px] font-mono text-slate-500">
-                Total Rows: {metadata.totalRows} | Valid: {metadata.validRows} | Dates: {marketDataService.getAvailableDates().length} | Files: {metadata.sourceFiles ? metadata.sourceFiles.length : 1} | Duplicates: {metadata.duplicateCount}
+                Mode Valid: {activeMetadata.validRows} | Total Stored: {totalStoredRecords} | Dates in Mode: {modeDistinctDates.length} | Source Files in Mode: {activeMetadata.sourceFiles ? activeMetadata.sourceFiles.length : (effectiveMode === 'IMPORTED_ONLY' ? (importedStoredCount > 0 ? 1 : 0) : 1)} | Duplicates: {activeMetadata.duplicateCount}
               </span>
             </div>
 
@@ -577,7 +615,7 @@ export const DataLab: React.FC<DataLabProps> = ({
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-mono text-slate-800">
                   {(['GOLDM', 'GOLDTEN', 'GOLDGUINEA', 'GOLDPETAL'] as ContractSymbol[]).map((sym) => {
-                    const cov = metadata.contractCoverage[sym] || { count: 0, earliestDate: 'N/A', latestDate: 'N/A', expiries: [] };
+                    const cov = activeMetadata.contractCoverage[sym] || { count: 0, earliestDate: 'N/A', latestDate: 'N/A', expiries: [] };
                     return (
                       <tr key={sym} className="hover:bg-slate-50">
                         <td className="py-3 px-4 font-bold text-slate-900">
@@ -612,15 +650,15 @@ export const DataLab: React.FC<DataLabProps> = ({
           </div>
 
           {/* Multi-File Provenance Accumulation Card */}
-          {metadata.sourceFiles && metadata.sourceFiles.length > 0 && (
+          {activeMetadata.sourceFiles && activeMetadata.sourceFiles.length > 0 && (
             <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
               <div className="p-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
                 <span className="text-xs font-mono font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
                   <Database className="w-3.5 h-3.5 text-slate-600" />
-                  Historical Source Files ({metadata.sourceFiles.length} Ingested Bhavcopy Files)
+                  Historical Source Files ({activeMetadata.sourceFiles.length} Ingested File{activeMetadata.sourceFiles.length === 1 ? '' : 's'})
                 </span>
                 <span className="text-[11px] font-mono text-slate-500">
-                  {marketDataService.getAvailableDates().length} Distinct Trading Dates
+                  {modeDistinctDates.length} Distinct Trading Date{modeDistinctDates.length === 1 ? '' : 's'} in {effectiveMode}
                 </span>
               </div>
               <div className="overflow-x-auto">
@@ -635,7 +673,7 @@ export const DataLab: React.FC<DataLabProps> = ({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-slate-800">
-                    {metadata.sourceFiles.map((f, idx) => (
+                    {activeMetadata.sourceFiles.map((f, idx) => (
                       <tr key={idx} className="hover:bg-slate-50">
                         <td className="py-2 px-3 font-bold text-slate-900">{f.filename}</td>
                         <td className="py-2 px-3 text-slate-700">{f.dateRange.start} → {f.dateRange.end}</td>

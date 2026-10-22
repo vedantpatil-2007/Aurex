@@ -14,6 +14,11 @@ export const DecisionPipelineVisual: React.FC<DecisionPipelineVisualProps> = ({ 
   const isLiquidityPass = liquidityGrade === 'PASS';
   const isLiquidityBorderline = liquidityGrade === 'BORDERLINE';
   const isCostSurviving = netEdge > 0;
+  const isGate0Blocked = decision === 'NO TRADE' && (
+    decisionResult.dataSufficiency?.canFormActionableVerdict === false ||
+    decisionResult.rationale.includes('cannot be validated') ||
+    decisionResult.rationale.includes('Insufficient')
+  );
 
   return (
     <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-4">
@@ -44,13 +49,20 @@ export const DecisionPipelineVisual: React.FC<DecisionPipelineVisualProps> = ({ 
               {formatINR(expectedEdge)}
             </div>
             <div className="text-[11px] text-slate-500 mt-0.5">
-              Gross Normalized Basis
+              {isGate0Blocked ? 'Instantaneous Basis (Uncalibrated)' : 'Gross Normalized Basis'}
             </div>
           </div>
-          <div className="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 font-semibold flex items-center gap-1">
-            <Check className="w-3 h-3" />
-            <span>Dislocation Detected</span>
-          </div>
+          {isGate0Blocked ? (
+            <div className="text-[10px] text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 font-semibold flex items-center gap-1">
+              <AlertTriangle className="w-3 h-3 text-amber-600 shrink-0" />
+              <span>Uncalibrated (Gate 0 Active)</span>
+            </div>
+          ) : (
+            <div className="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 font-semibold flex items-center gap-1">
+              <Check className="w-3 h-3" />
+              <span>Dislocation Detected</span>
+            </div>
+          )}
         </div>
 
         {/* Stage 2: Liquidity Check */}
@@ -143,7 +155,7 @@ export const DecisionPipelineVisual: React.FC<DecisionPipelineVisualProps> = ({ 
           <div className="text-[10px] text-slate-300">
             {decision === 'ACTIONABLE' && 'Ready for capital allocation'}
             {decision === 'WATCH' && 'Stage order, await depth'}
-            {decision === 'NO TRADE' && 'Reject: Fails hurdle tests'}
+            {decision === 'NO TRADE' && (isGate0Blocked ? 'Gate 0: Insufficient History Block' : 'Reject: Fails hurdle tests')}
           </div>
         </div>
       </div>

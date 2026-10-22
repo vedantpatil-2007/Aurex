@@ -1,4 +1,4 @@
-import { RelativeValueSpreadPoint, ZScoreAnalysis, NormalizedObservation, ContractSymbol } from '../types/market';
+import { RelativeValueSpreadPoint, ZScoreAnalysis, NormalizedObservation, ContractSymbol, StatisticalStatus } from '../types/market';
 
 /**
  * Selects the active near-month observation for a contract symbol on a specific date:
@@ -24,6 +24,46 @@ export function selectActiveObservation(observations: NormalizedObservation[]): 
 
   const sorted = [...observations].sort((a, b) => a.expiryDate.localeCompare(b.expiryDate));
   return sorted[0];
+}
+
+/**
+ * Authoritatively selects the active near-month observation for a symbol and date
+ * using the documented deterministic exchange policy:
+ * 1. Filter observations for symbol on exact date
+ * 2. Highest traded volume
+ * 3. If volume is zero or equal, nearest expiry with Days to Expiry >= 3 days
+ * 4. Fallback: earliest valid expiry date
+ * 5. If not available on exact date, falls back to most recent historical date <= date
+ */
+export function getActiveObservation(
+  observations: NormalizedObservation[],
+  symbol: ContractSymbol,
+  date?: string
+): NormalizedObservation | undefined {
+  if (!observations || observations.length === 0) return undefined;
+  const symbolObs = observations.filter(o => o.symbol === symbol);
+  if (symbolObs.length === 0) return undefined;
+
+  if (date) {
+    const onDate = symbolObs.filter(o => o.date === date);
+    if (onDate.length > 0) {
+      return selectActiveObservation(onDate);
+    }
+    const priorDates = Array.from(new Set(symbolObs.map(o => o.date)))
+      .filter(d => d <= date)
+      .sort((a, b) => a.localeCompare(b));
+    if (priorDates.length > 0) {
+      const latestPriorDate = priorDates[priorDates.length - 1];
+      const onPriorDate = symbolObs.filter(o => o.date === latestPriorDate);
+      return selectActiveObservation(onPriorDate);
+    }
+    return undefined;
+  }
+
+  const dates = Array.from(new Set(symbolObs.map(o => o.date))).sort((a, b) => a.localeCompare(b));
+  const latestDate = dates[dates.length - 1];
+  const onLatestDate = symbolObs.filter(o => o.date === latestDate);
+  return selectActiveObservation(onLatestDate);
 }
 
 /**
@@ -128,6 +168,7 @@ export function calculateZScore(
       series: [],
       isCalculable: false,
       incalculableReason: 'Spread series is empty',
+      statisticalStatus: 'DATA_UNAVAILABLE',
       rollingWindowDays: rollingWindow
     };
   }
@@ -146,9 +187,11 @@ export function calculateZScore(
   // Determine calculability based on isolated single-provenance history
   let isCalculable = true;
   let incalculableReason: string | undefined = undefined;
+  let statisticalStatus: StatisticalStatus = 'CALCULABLE';
 
   if (eligibleSpreads.length < 2) {
     isCalculable = false;
+    statisticalStatus = 'INSUFFICIENT_HISTORY';
     incalculableReason = targetProv === 'PROTOTYPE SIMULATION'
       ? 'Insufficient history (< 2 sessions)'
       : `Insufficient single-provenance history (${eligibleSpreads.length} session available). Statistical calibration cannot cross provenance boundary into prototype simulation.`;
@@ -166,6 +209,7 @@ export function calculateZScore(
 
   if (isCalculable && standardDeviation <= 0.0001) {
     isCalculable = false;
+    statisticalStatus = 'ZERO_VARIANCE';
     incalculableReason = 'Zero spread dispersion (σ = 0)';
   }
 
@@ -185,9 +229,9 @@ export function calculateZScore(
     if (windowSlice.length < 2) {
       return {
         ...point,
-        zScore: 0,
-        meanSpread: Number((windowSlice[0] || 0).toFixed(2)),
-        stdDevSpread: 0
+        zScore: undefined,
+        meanSpread: undefined,
+        stdDevSpread: undefined
       };
     }
 
@@ -200,7 +244,7 @@ export function calculateZScore(
     }
     const wStdDev = Math.sqrt(wVariance / windowSlice.length);
 
-    let zScore = 0;
+    let zScore: number | undefined = undefined;
     if (wStdDev > 0.0001) {
       zScore = Number(((point.spread - wMean) / wStdDev).toFixed(2));
     }
@@ -229,6 +273,7 @@ export function calculateZScore(
     series: enrichedSeries,
     isCalculable,
     incalculableReason,
+    statisticalStatus,
     rollingWindowDays: rollingWindow,
     calibrationObservationCount: eligibleSpreads.length,
     calibrationProvenance: targetProv

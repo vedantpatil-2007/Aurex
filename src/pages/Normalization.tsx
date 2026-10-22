@@ -2,14 +2,12 @@ import React, { useState, useMemo } from 'react';
 import { NormalizedObservation, ContractSymbol } from '../types/market';
 import { CONTRACT_SPECIFICATIONS, CONTRACT_LIST } from '../data/contracts';
 import { getNormalizationBreakdown } from '../engines/normalizationEngine';
+import { getActiveObservation } from '../engines/relativeValueEngine';
 import { NormalizedComparisonChart } from '../components/charts/NormalizedComparisonChart';
 import { formatINR } from '../utils/formatters';
 import { 
-  Scale, 
   ArrowRight, 
   Calculator, 
-  Calendar, 
-  CheckCircle2, 
   Layers, 
   HelpCircle,
   Sparkles
@@ -38,10 +36,9 @@ export const Normalization: React.FC<NormalizationPageProps> = ({
 
   const spec = CONTRACT_SPECIFICATIONS[selectedContract];
 
-  // Find observation for selected contract and selected date
+  // Find active near-month observation for selected contract and selected date
   const currentObs = useMemo(() => {
-    return observations.find(o => o.symbol === selectedContract && o.date === selectedDate) ||
-      observations.filter(o => o.symbol === selectedContract).slice(-1)[0];
+    return getActiveObservation(observations, selectedContract, selectedDate);
   }, [observations, selectedContract, selectedDate]);
 
   const activeRawPrice = interactiveRawPriceOverride !== null 

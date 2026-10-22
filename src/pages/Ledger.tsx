@@ -10,7 +10,7 @@ import {
 } from '../types/market';
 import { EdgeSurvivalLedger } from '../components/ledger/EdgeSurvivalLedger';
 import { buildEdgeSurvivalLedger } from '../engines/ledgerEngine';
-import { calculateZScore } from '../engines/relativeValueEngine';
+import { calculateZScore, getActiveObservation } from '../engines/relativeValueEngine';
 import { runWalkForwardBacktest } from '../engines/backtestEngine';
 import { buildPerformanceWaterfallBridge, verifyAccountingIdentity } from '../engines/attributionEngine';
 import { formatINR } from '../utils/formatters';
@@ -67,14 +67,14 @@ export const Ledger: React.FC<LedgerPageProps> = ({
 }) => {
   const [activeLedgerTab, setActiveLedgerTab] = useState<'edge-survival' | 'performance-attribution'>('edge-survival');
 
-  // Find observations for selected pair on the chosen date
+  // Find active near-month observations for selected pair on the chosen date
   const obsA = useMemo(() => {
-    return allObservations.find(o => o.symbol === selectedPair[0] && o.date === selectedDate) ||
+    return getActiveObservation(allObservations, selectedPair[0], selectedDate) ||
       latestData[selectedPair[0]];
   }, [allObservations, selectedPair, selectedDate, latestData]);
 
   const obsB = useMemo(() => {
-    return allObservations.find(o => o.symbol === selectedPair[1] && o.date === selectedDate) ||
+    return getActiveObservation(allObservations, selectedPair[1], selectedDate) ||
       latestData[selectedPair[1]];
   }, [allObservations, selectedPair, selectedDate, latestData]);
 

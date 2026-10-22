@@ -95,6 +95,13 @@ export interface RelativeValueSpreadPoint {
   isCrossProvenanceBoundary?: boolean;
 }
 
+export type StatisticalStatus =
+  | 'CALCULABLE'
+  | 'INSUFFICIENT_HISTORY'
+  | 'ZERO_VARIANCE'
+  | 'PROVENANCE_MISMATCH'
+  | 'DATA_UNAVAILABLE';
+
 export interface ZScoreAnalysis {
   currentZScore: number;
   mean: number;
@@ -104,6 +111,7 @@ export interface ZScoreAnalysis {
   series: RelativeValueSpreadPoint[];
   isCalculable?: boolean;
   incalculableReason?: string;
+  statisticalStatus?: StatisticalStatus;
   rollingWindowDays?: number;
   isCrossProvenanceContaminated?: boolean;
   calibrationObservationCount?: number;

@@ -2,7 +2,8 @@ import React from 'react';
 import { 
   ContractSymbol, 
   FrictionAssumptions, 
-  DecisionResult 
+  DecisionResult,
+  NormalizedObservation
 } from '../types/market';
 import { FrictionSliders } from '../components/decision/FrictionSliders';
 import { DecisionPipelineVisual } from '../components/decision/DecisionPipelineVisual';
@@ -10,12 +11,11 @@ import { CostWaterfallChart } from '../components/decision/CostWaterfallChart';
 import { WhyExplanationPanel } from '../components/decision/WhyExplanationPanel';
 import { DecisionBadge } from '../components/cards/DecisionBadge';
 import { StressLabSensitivityGrid } from '../components/decision/StressLabSensitivityGrid';
-import { marketDataService } from '../services/marketDataService';
 import { 
-  ShieldCheck, 
   ArrowRight, 
   Zap,
-  FileSpreadsheet
+  FileSpreadsheet,
+  ShieldCheck
 } from 'lucide-react';
 
 interface DecisionPageProps {
@@ -27,6 +27,7 @@ interface DecisionPageProps {
   manualEdge: number | undefined;
   onManualEdgeChange: (val: number | undefined) => void;
   calculatedSpread: number;
+  latestData?: Record<ContractSymbol, NormalizedObservation>;
   onNavigate: (page: any) => void;
 }
 
@@ -39,6 +40,7 @@ export const Decision: React.FC<DecisionPageProps> = ({
   manualEdge,
   onManualEdgeChange,
   calculatedSpread,
+  latestData,
   onNavigate
 }) => {
   // Preset scenarios to help judge test different decision states instantly!
@@ -195,10 +197,10 @@ export const Decision: React.FC<DecisionPageProps> = ({
         pair={selectedPair}
         observedSpread={calculatedSpread}
         manualExpectedEdge={manualEdge}
-        volA={marketDataService.getLatestObservations()[selectedPair[0]]?.volume || 10000}
-        oiA={marketDataService.getLatestObservations()[selectedPair[0]]?.openInterest || 15000}
-        volB={marketDataService.getLatestObservations()[selectedPair[1]]?.volume || 8000}
-        oiB={marketDataService.getLatestObservations()[selectedPair[1]]?.openInterest || 11000}
+        volA={latestData?.[selectedPair[0]]?.volume ?? 0}
+        oiA={latestData?.[selectedPair[0]]?.openInterest ?? 0}
+        volB={latestData?.[selectedPair[1]]?.volume ?? 0}
+        oiB={latestData?.[selectedPair[1]]?.openInterest ?? 0}
         baseFriction={friction}
         onApplyAssumptions={onFrictionChange}
       />

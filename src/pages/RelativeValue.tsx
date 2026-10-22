@@ -1,24 +1,17 @@
 import React, { useState, useMemo } from 'react';
 import { 
   NormalizedObservation, 
-  ContractSymbol, 
-  RelativeValueSpreadPoint 
+  ContractSymbol
 } from '../types/market';
 import { CONTRACT_SPECIFICATIONS } from '../data/contracts';
-import { buildPairSpreadSeries, calculateZScore } from '../engines/relativeValueEngine';
+import { buildPairSpreadSeries, calculateZScore, getActiveObservation } from '../engines/relativeValueEngine';
 import { SpreadTimeSeriesChart } from '../components/charts/SpreadTimeSeriesChart';
 import { ZScoreBandsChart } from '../components/charts/ZScoreBandsChart';
 import { ContractComparabilityCard } from '../components/contracts/ContractComparabilityCard';
-import { MetricCard } from '../components/cards/MetricCard';
 import { formatINR } from '../utils/formatters';
 import { 
-  GitCompare, 
   ArrowRight, 
-  AlertTriangle, 
-  Layers, 
-  Info,
-  Calendar,
-  Sliders
+  AlertTriangle
 } from 'lucide-react';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
 
@@ -26,6 +19,7 @@ interface RelativeValuePageProps {
   observations: NormalizedObservation[];
   selectedPair: [ContractSymbol, ContractSymbol];
   onPairChange: (pair: [ContractSymbol, ContractSymbol]) => void;
+  selectedDate?: string;
   onNavigate: (page: any) => void;
 }
 
@@ -33,6 +27,7 @@ export const RelativeValue: React.FC<RelativeValuePageProps> = ({
   observations,
   selectedPair,
   onPairChange,
+  selectedDate,
   onNavigate
 }) => {
   const allSymbols: ContractSymbol[] = ['GOLDM', 'GOLDTEN', 'GOLDGUINEA', 'GOLDPETAL'];
@@ -66,6 +61,16 @@ export const RelativeValue: React.FC<RelativeValuePageProps> = ({
   const currentZScore = zScoreAnalysis.currentZScore;
   const meanSpread = zScoreAnalysis.mean;
   const spreadVolatility = zScoreAnalysis.standardDeviation;
+
+  // Selected date context for active contracts
+  const asOfDate = selectedDate || latestSpreadPoint?.date;
+  const activeObsA = useMemo(() => {
+    return getActiveObservation(observations, selectedPair[0], asOfDate);
+  }, [observations, selectedPair, asOfDate]);
+
+  const activeObsB = useMemo(() => {
+    return getActiveObservation(observations, selectedPair[1], asOfDate);
+  }, [observations, selectedPair, asOfDate]);
 
   // Chart data for dual line comparison
   const pairPriceChartData = useMemo(() => {
@@ -296,6 +301,7 @@ export const RelativeValue: React.FC<RelativeValuePageProps> = ({
         spreadSeries={spreadSeries}
         pair={selectedPair}
         meanSpread={meanSpread}
+        isCalculable={zScoreAnalysis.isCalculable}
       />
 
       {/* Chart 3: Rolling Z-Score with Threshold Markers (+2σ, +1.5σ, 0, -1.5σ, -2σ) */}
@@ -303,12 +309,14 @@ export const RelativeValue: React.FC<RelativeValuePageProps> = ({
         spreadSeries={spreadSeries}
         pair={selectedPair}
         currentZScore={currentZScore}
+        isCalculable={zScoreAnalysis.isCalculable}
+        incalculableReason={zScoreAnalysis.incalculableReason}
       />
 
-      {/* Contract Comparability Evaluation for the active pair */}
+      {/* Contract Comparability Evaluation for the active near-month pair */}
       <ContractComparabilityCard
-        obsA={seriesA[seriesA.length - 1]}
-        obsB={seriesB[seriesB.length - 1]}
+        obsA={activeObsA}
+        obsB={activeObsB}
         pair={selectedPair}
       />
 
@@ -324,7 +332,7 @@ export const RelativeValue: React.FC<RelativeValuePageProps> = ({
             </span>
           </div>
           <span className="text-xs font-mono text-slate-500">
-            Current Spread: ₹{currentSpread.toFixed(2)}/10g ({currentZScore > 0 ? '+' : ''}{currentZScore.toFixed(2)}σ)
+            Current Spread: ₹{currentSpread.toFixed(2)}/10g ({zScoreAnalysis.isCalculable !== false ? `${currentZScore > 0 ? '+' : ''}${currentZScore.toFixed(2)}σ` : 'Z-Score: N/A'})
           </span>
         </div>
 
@@ -336,7 +344,13 @@ export const RelativeValue: React.FC<RelativeValuePageProps> = ({
               What Moved?
             </div>
             <p className="text-slate-700 leading-relaxed">
-              Normalized spread between {selectedPair[0]} (₹{priceA.toFixed(0)}/10g) and {selectedPair[1]} (₹{priceB.toFixed(0)}/10g) is currently <strong>₹{currentSpread.toFixed(2)}/10g</strong>. Over the trailing {rollingWindow} sessions, spread has traded with a mean of ₹{meanSpread.toFixed(2)}/10g and dispersion σ = ₹{spreadVolatility.toFixed(2)}/10g.
+              Normalized spread between {selectedPair[0]} (₹{priceA.toFixed(0)}/10g) and {selectedPair[1]} (₹{priceB.toFixed(0)}/10g) is currently <strong>₹{currentSpread.toFixed(2)}/10g</strong>. {
+                zScoreAnalysis.isCalculable !== false ? (
+                  `Over the trailing ${rollingWindow} sessions, spread has traded with a mean of ₹${meanSpread.toFixed(2)}/10g and dispersion σ = ₹${spreadVolatility.toFixed(2)}/10g.`
+                ) : (
+                  `Historical baseline mean and dispersion are unavailable because only ${spreadSeries.length} single-provenance trading session is available (minimum 2 required for point dispersion, 10+ recommended for rolling baseline).`
+                )
+              }
             </p>
           </div>
 
@@ -347,9 +361,13 @@ export const RelativeValue: React.FC<RelativeValuePageProps> = ({
               Why Might It Matter?
             </div>
             <p className="text-slate-700 leading-relaxed">
-              {Math.abs(currentZScore) >= 1.5 
-                ? `Current z-score of ${currentZScore.toFixed(2)}σ represents a statistically significant basis dislocation. While both contracts reflect gold bullion, differing quotation units, lot sizing, and retail premiums create temporary divergence.`
-                : `Spread is hovering within ${currentZScore.toFixed(2)}σ of historical mean. Basis reflects normal physical carrying charges and quotation parity.`}
+              {zScoreAnalysis.isCalculable === false ? (
+                `Instantaneous basis difference of ₹${currentSpread.toFixed(2)}/10g is measurable directly from settlement prices, but statistical deviation (Z-score) is uncalibrated. A statistical dislocation cannot be declared without multi-session historical distribution.`
+              ) : Math.abs(currentZScore) >= 1.5 ? (
+                `Current z-score of ${currentZScore.toFixed(2)}σ represents a statistically significant basis dislocation. While both contracts reflect gold bullion, differing quotation units, lot sizing, and retail premiums create temporary divergence.`
+              ) : (
+                `Spread is hovering within ${currentZScore.toFixed(2)}σ of historical mean. Basis reflects normal physical carrying charges and quotation parity.`
+              )}
             </p>
           </div>
 
@@ -360,7 +378,11 @@ export const RelativeValue: React.FC<RelativeValuePageProps> = ({
               What Invalidates The Signal?
             </div>
             <p className="text-slate-700 leading-relaxed">
-              Execution friction! STT, exchange turnover fees, bid-ask spread crossing, and market impact on the thinner leg ({selectedPair[0] === 'GOLDM' ? selectedPair[1] : selectedPair[0]}) require at least ₹80–₹110/10g to break even. If spread convergence is smaller than friction, the trade is mathematically invalid.
+              {zScoreAnalysis.isCalculable === false ? (
+                `Lack of multi-session calibration invalidates any directional basis convergence assumption! Furthermore, execution friction (STT, exchange turnover, bid-ask crossing, haircut) requires ₹80–₹110/10g to break even.`
+              ) : (
+                `Execution friction! STT, exchange turnover fees, bid-ask spread crossing, and market impact on the thinner leg (${selectedPair[0] === 'GOLDM' ? selectedPair[1] : selectedPair[0]}) require at least ₹80–₹110/10g to break even. If spread convergence is smaller than friction, the trade is mathematically invalid.`
+              )}
             </p>
           </div>
 
@@ -371,7 +393,11 @@ export const RelativeValue: React.FC<RelativeValuePageProps> = ({
               What Evidence Is Still Missing?
             </div>
             <p className="text-slate-700 leading-relaxed">
-              Intraday order-book depth and tick-level bid/ask quotes are proxy-estimated from end-of-day settlement bhavcopy volume and open interest. Real-time market execution requires live L2 order book confirmation.
+              {zScoreAnalysis.isCalculable === false ? (
+                `Contemporaneous historical depth: at least 2 trading dates are required to calculate spread variance, 5 for rolling distribution, and 15 for out-of-sample walk-forward validation. Intraday L2 order-book quotes are also needed to confirm live fillability.`
+              ) : (
+                `Intraday order-book depth and tick-level bid/ask quotes are proxy-estimated from end-of-day settlement bhavcopy volume and open interest. Real-time market execution requires live L2 order book confirmation.`
+              )}
             </p>
           </div>
         </div>

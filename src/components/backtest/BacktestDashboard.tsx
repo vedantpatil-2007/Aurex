@@ -19,18 +19,8 @@ import {
 } from 'recharts';
 import {
   TrendingUp,
-  Play,
-  RotateCcw,
-  ShieldCheck,
   AlertTriangle,
-  ArrowUpRight,
-  ArrowDownRight,
-  Sliders,
-  DollarSign,
   Activity,
-  Layers,
-  CheckCircle2,
-  XCircle,
   Clock
 } from 'lucide-react';
 import { formatINR } from '../../utils/formatters';
@@ -45,7 +35,7 @@ interface BacktestDashboardProps {
 export const BacktestDashboard: React.FC<BacktestDashboardProps> = ({
   observations,
   selectedPair,
-  onPairChange,
+  onPairChange: _onPairChange,
   defaultFriction = {
     slippagePer10g: 20,
     brokerageTaxesPer10g: 30,
@@ -58,8 +48,8 @@ export const BacktestDashboard: React.FC<BacktestDashboardProps> = ({
   const [exitZ, setExitZ] = useState<number>(0.0);
   const [stopLossZ, setStopLossZ] = useState<number>(2.5);
   const [maxHolding, setMaxHolding] = useState<number>(12);
-  const [warmUp, setWarmUp] = useState<number>(15);
-  const [friction, setFriction] = useState<FrictionAssumptions>(defaultFriction);
+  const warmUp = 15;
+  const friction = defaultFriction;
 
   // Compute backtest strictly without look-ahead bias
   const backtestResult = useMemo(() => {
@@ -182,8 +172,36 @@ export const BacktestDashboard: React.FC<BacktestDashboardProps> = ({
         </div>
       )}
 
-      {/* KPI Performance Metrics */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 font-mono">
+      {/* KPI Performance Metrics or Insufficient History State */}
+      {(backtestResult.totalAvailableDates ?? 0) < 15 ? (
+        <div className="bg-white border border-slate-200 rounded-xl p-8 text-center space-y-3 shadow-sm">
+          <div className="w-12 h-12 rounded-full bg-amber-100 text-amber-800 mx-auto flex items-center justify-center">
+            <AlertTriangle className="w-6 h-6 text-amber-600" />
+          </div>
+          <div className="font-mono font-bold text-slate-900 text-base">
+            INSUFFICIENT HISTORICAL DATA FOR WALK-FORWARD BACKTESTING
+          </div>
+          <p className="text-xs text-slate-600 max-w-xl mx-auto leading-relaxed">
+            Walk-forward chronological backtesting requires at least <strong>15 sequential sessions</strong> within the same single-provenance segment to calibrate rolling statistical parameters (μ, σ, Z-score) without look-ahead bias or synthetic data fabrication.
+          </p>
+          <div className="flex flex-wrap items-center justify-center gap-3 text-xs font-mono pt-2">
+            <div className="bg-slate-50 border border-slate-200 px-3 py-1.5 rounded">
+              Eligible Sessions: <strong className="text-slate-900">{backtestResult.totalAvailableDates ?? 0}</strong>
+            </div>
+            <div className="bg-slate-50 border border-slate-200 px-3 py-1.5 rounded">
+              Required Threshold: <strong className="text-slate-900">15 sessions</strong>
+            </div>
+            <div className="bg-amber-50 border border-amber-300 px-3 py-1.5 rounded text-amber-900">
+              Shortfall: <strong>{Math.max(0, 15 - (backtestResult.totalAvailableDates ?? 0))} session{Math.max(0, 15 - (backtestResult.totalAvailableDates ?? 0)) === 1 ? '' : 's'}</strong>
+            </div>
+          </div>
+          <p className="text-[11px] text-slate-500 italic max-w-lg mx-auto pt-1">
+            Zero trades and zero synthetic P&L are simulated to prevent false capital-preservation claims on uncalibrated single-day observations.
+          </p>
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 font-mono">
         <div className="bg-white border border-slate-200 rounded-xl p-3.5 space-y-1 shadow-sm">
           <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Net Realized P&L</div>
           <div className={`text-lg font-bold ${backtestResult.netPnL >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
@@ -386,6 +404,8 @@ export const BacktestDashboard: React.FC<BacktestDashboardProps> = ({
           </div>
         )}
       </div>
+        </>
+      )}
     </div>
   );
 };

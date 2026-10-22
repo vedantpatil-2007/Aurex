@@ -22,6 +22,7 @@ import { validateMarketData } from '../utils/dataQuality';
 import { parseBhavcopyCsv, ParseResult, ColumnMapping, computeFileSha256, computeQuickHash } from './csvParserService';
 import { SAMPLE_MCX_BHAVCOPY_CSV } from '../data/sampleOfficialBhavcopy';
 import { assessDataSufficiency } from '../engines/dataSufficiencyEngine';
+import { getActiveObservation } from '../engines/relativeValueEngine';
 
 type DataChangeListener = (observations: MarketObservation[]) => void;
 
@@ -247,13 +248,61 @@ class MarketDataService {
   }
 
   /**
-   * Returns dataset metadata
+   * Returns dataset metadata reflecting the requested or active data mode.
+   * Total stored rows reflects total physical records in memory, while
+   * validRows, dateRange, and contractCoverage reflect the active mode.
    */
-  public getMetadata(): DatasetMetadata {
-    const breakdown = this.getProvenanceBreakdown();
+  public getMetadata(dataMode?: DataMode): DatasetMetadata {
+    const mode = dataMode ?? this.activeDataMode;
+    const breakdown = this.getProvenanceBreakdown(mode);
+    const modeObs = this.getHistoricalData({ dataMode: mode });
+
+    const totalStored = this.localObservations.length;
+    const modeDates = Array.from(new Set(modeObs.map(o => o.date))).sort((a, b) => a.localeCompare(b));
+
+    const dateRange = modeDates.length > 0
+      ? { start: modeDates[0], end: modeDates[modeDates.length - 1] }
+      : { start: 'N/A', end: 'N/A' };
+
+    // Compute contract coverage strictly from mode-filtered observations
+    const allSymbols: ContractSymbol[] = ['GOLDM', 'GOLDTEN', 'GOLDGUINEA', 'GOLDPETAL'];
+    const contractCoverage: Record<ContractSymbol, ContractCoverageItem> = {} as any;
+    for (const sym of allSymbols) {
+      const symObs = modeObs.filter(o => o.symbol === sym);
+      const symDates = Array.from(new Set(symObs.map(o => o.date))).sort((a, b) => a.localeCompare(b));
+      const symExpiries = Array.from(new Set(symObs.map(o => o.expiryDate))).sort((a, b) => a.localeCompare(b));
+      contractCoverage[sym] = {
+        count: symObs.length,
+        earliestDate: symDates[0] || 'N/A',
+        latestDate: symDates[symDates.length - 1] || 'N/A',
+        expiries: symExpiries
+      };
+    }
+
+    // Filter source files relevant to this mode
+    let sourceFiles = this.metadata.sourceFiles;
+    if (sourceFiles && mode !== 'ALL') {
+      if (mode === 'PROTOTYPE_ONLY') {
+        sourceFiles = [];
+      } else if (mode === 'IMPORTED_ONLY') {
+        sourceFiles = this.metadata.sourceFiles;
+      }
+    }
+
     return {
       ...this.metadata,
-      provenance: this.getProvenance(),
+      totalRows: totalStored,
+      validRows: modeObs.length,
+      dateRange,
+      contractCoverage,
+      sourceFiles,
+      provenance: mode === 'PROTOTYPE_ONLY'
+        ? 'PROTOTYPE SIMULATION'
+        : mode === 'IMPORTED_ONLY'
+        ? (this.metadata.isUserAttested
+          ? 'USER-ATTESTED SOURCE — NOT INDEPENDENTLY VERIFIED'
+          : 'USER-IMPORTED DATA — SOURCE UNVERIFIED')
+        : this.getProvenance(),
       provenanceBreakdown: breakdown
     };
   }
@@ -323,7 +372,12 @@ class MarketDataService {
   }
 
   /**
-   * Returns latest available observation per contract symbol as-of a specific date and mode.
+   * Returns authoritative active near-month observation per contract symbol as-of a specific date and mode.
+   * Applies the documented exchange active-selection policy:
+   * 1. Observations on exact as-of date
+   * 2. Highest volume
+   * 3. Nearest expiry (Days to Expiry >= 3)
+   * 4. Earliest valid expiry fallback
    */
   public getLatestObservations(asOfDate?: string, dataMode?: DataMode): Record<ContractSymbol, NormalizedObservation> {
     const mode = dataMode ?? this.activeDataMode;
@@ -335,26 +389,14 @@ class MarketDataService {
       return {} as Record<ContractSymbol, NormalizedObservation>;
     }
     const latestDate = dates[dates.length - 1];
-    const modeObs = this.getHistoricalData({ dataMode: mode });
-    const latestRaw = modeObs.filter(o => o.date === latestDate);
+    const modeNormObs = this.getNormalizedHistoricalData({ dataMode: mode });
 
-    const result: Partial<Record<ContractSymbol, NormalizedObservation>> = {};
-    for (const obs of latestRaw) {
-      if (!result[obs.symbol] || obs.volume > (result[obs.symbol]?.volume || 0)) {
-        result[obs.symbol] = normalizeObservation(obs);
-      }
-    }
-
-    // Fallback: If any symbol is missing on latest date, pick its most recent observation as-of that date within mode
     const allSymbols: ContractSymbol[] = ['GOLDM', 'GOLDTEN', 'GOLDGUINEA', 'GOLDPETAL'];
+    const result: Partial<Record<ContractSymbol, NormalizedObservation>> = {};
     for (const sym of allSymbols) {
-      if (!result[sym]) {
-        const symObs = modeObs
-          .filter(o => o.symbol === sym && (!asOfDate || o.date <= asOfDate))
-          .sort((a, b) => a.date.localeCompare(b.date));
-        if (symObs.length > 0) {
-          result[sym] = normalizeObservation(symObs[symObs.length - 1]);
-        }
+      const activeObs = getActiveObservation(modeNormObs, sym, latestDate);
+      if (activeObs) {
+        result[sym] = activeObs;
       }
     }
 
