@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import {
   DatasetMetadata,
   DataProvenance,
@@ -24,8 +24,6 @@ import {
   Trash2,
   ArrowRight,
   ExternalLink,
-  HardDrive,
-  Hash,
   ShieldAlert
 } from 'lucide-react';
 
@@ -42,7 +40,7 @@ export const DataLab: React.FC<DataLabProps> = ({
   metadata,
   provenance,
   dataMode,
-  onSelectDataMode,
+  onSelectDataMode: _onSelectDataMode,
   onDatasetChanged,
   onNavigate
 }) => {
@@ -53,6 +51,24 @@ export const DataLab: React.FC<DataLabProps> = ({
   const importedStoredCount = marketDataService.getMetadata('IMPORTED_ONLY').validRows;
   const modeDistinctDates = marketDataService.getAvailableDates(effectiveMode);
   const activeProvenance = activeMetadata.provenance;
+
+  const formattedDateRange = useMemo(() => {
+    if (modeDistinctDates.length === 0) return 'No Dates Available';
+    if (activeMetadata.dateRange.start === activeMetadata.dateRange.end) {
+      const parts = activeMetadata.dateRange.start.split('-');
+      if (parts.length === 3) {
+        const year = parts[0];
+        const monthIdx = parseInt(parts[1], 10) - 1;
+        const day = parseInt(parts[2], 10);
+        const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+        if (monthIdx >= 0 && monthIdx < 12) {
+          return `${months[monthIdx]} ${day}, ${year}`;
+        }
+      }
+      return activeMetadata.dateRange.start;
+    }
+    return `${activeMetadata.dateRange.start} → ${activeMetadata.dateRange.end}`;
+  }, [modeDistinctDates, activeMetadata.dateRange]);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [csvRawText, setCsvRawText] = useState<string>('');
   const [parsePreview, setParsePreview] = useState<ParseResult | null>(null);
@@ -140,6 +156,11 @@ export const DataLab: React.FC<DataLabProps> = ({
 
   // Reset to deterministic Prototype Simulation
   const handleResetToSimulation = () => {
+    if (marketDataService.hasPersistedData()) {
+      if (!window.confirm('Resetting will clear the active workspace and restore the default calibrated prototype simulation. Continue?')) {
+        return;
+      }
+    }
     marketDataService.resetToSimulation();
     setParsePreview(null);
     setSelectedFile(null);
@@ -150,12 +171,14 @@ export const DataLab: React.FC<DataLabProps> = ({
 
   // Clear persistent local storage dataset and revert to simulation
   const handleClearLocalStorage = () => {
-    marketDataService.clearPersistedData();
-    setParsePreview(null);
-    setSelectedFile(null);
-    setCsvRawText('');
-    onDatasetChanged();
-    setActiveTab('current');
+    if (window.confirm('Are you sure you want to clear stored imported records from browser storage? This will reset the workspace to the prototype simulation.')) {
+      marketDataService.clearPersistedData();
+      setParsePreview(null);
+      setSelectedFile(null);
+      setCsvRawText('');
+      onDatasetChanged();
+      setActiveTab('current');
+    }
   };
 
   // Download official sample CSV file
@@ -219,19 +242,11 @@ export const DataLab: React.FC<DataLabProps> = ({
           </p>
         </div>
 
-        {/* Action buttons */}
+        {/* Header Action: Reset to Simulation */}
         <div className="flex items-center gap-2 self-start flex-wrap">
           <button
-            onClick={handleLoadBundledSample}
-            className="px-3.5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg text-xs transition-colors flex items-center gap-1.5 shadow-sm font-mono"
-            title="Explore bundled illustrative sample data formatted to MCX Bhavcopy schema (unverified sourcing)"
-          >
-            <Database className="w-3.5 h-3.5" />
-            <span>Explore Demo Data</span>
-          </button>
-          <button
             onClick={handleResetToSimulation}
-            className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg text-xs transition-colors flex items-center gap-1.5 border border-slate-300 font-mono"
+            className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg text-xs transition-colors flex items-center gap-1.5 border border-slate-300 font-mono shadow-xs cursor-pointer"
             title="Restore default calibrated prototype simulation"
           >
             <RefreshCw className="w-3.5 h-3.5" />
@@ -257,172 +272,115 @@ export const DataLab: React.FC<DataLabProps> = ({
         </button>
       </div>
 
-      {/* Provenance Status Banner with SHA-256 and Persistence */}
-      <div className={`p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
-        activeProvenance === 'OFFICIAL MCX DATA — SOURCE VERIFIED'
-          ? 'bg-emerald-50 border-emerald-300 text-emerald-950'
-          : activeProvenance === 'USER-ATTESTED SOURCE — NOT INDEPENDENTLY VERIFIED'
-          ? 'bg-teal-50 border-teal-300 text-teal-950'
-          : activeProvenance === 'HYBRID / MIXED PROVENANCE'
-          ? 'bg-purple-50 border-purple-300 text-purple-950'
-          : activeProvenance === 'USER-IMPORTED DATA — SOURCE UNVERIFIED'
-          ? 'bg-sky-50 border-sky-300 text-sky-950'
-          : activeProvenance === 'PROTOTYPE SAMPLE — UNVERIFIED SOURCING'
-          ? 'bg-indigo-50 border-indigo-300 text-indigo-950'
-          : 'bg-amber-50 border-amber-300 text-amber-950'
-      }`}>
-        <div className="flex items-start sm:items-center gap-3">
-          <div className={`w-9 h-9 rounded-lg flex items-center justify-center font-bold text-sm shrink-0 mt-0.5 sm:mt-0 ${
-            activeProvenance === 'OFFICIAL MCX DATA — SOURCE VERIFIED'
-              ? 'bg-emerald-600 text-white'
-              : activeProvenance === 'USER-ATTESTED SOURCE — NOT INDEPENDENTLY VERIFIED'
-              ? 'bg-teal-700 text-white'
-              : activeProvenance === 'HYBRID / MIXED PROVENANCE'
-              ? 'bg-purple-700 text-white'
-              : activeProvenance === 'USER-IMPORTED DATA — SOURCE UNVERIFIED'
-              ? 'bg-sky-600 text-white'
-              : activeProvenance === 'PROTOTYPE SAMPLE — UNVERIFIED SOURCING'
-              ? 'bg-indigo-600 text-white'
-              : 'bg-amber-600 text-white'
-          }`}>
-            <Database className="w-5 h-5" />
-          </div>
-          <div className="space-y-1">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs uppercase font-mono font-bold tracking-wider px-2 py-0.5 rounded bg-white/90 border shadow-xs">
-                Active Source: {activeProvenance}
-              </span>
-              <span className="text-xs text-slate-600 font-mono">
-                {activeMetadata.filename || 'internal'}
-              </span>
-              {activeMetadata.isUserAttested && (
-                <span className="text-[10px] uppercase font-mono font-bold px-1.5 py-0.5 rounded bg-teal-100 text-teal-800 border border-teal-300">
-                  User Attested (Unverified)
-                </span>
-              )}
-              {activeMetadata.isVerified && (
-                <span className="text-[10px] uppercase font-mono font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-300">
-                  Independent Audit Passed
-                </span>
-              )}
-            </div>
-
-            <div className="text-xs text-slate-700 font-medium flex items-center gap-2 flex-wrap">
-              <span>Mode:</span>
-              <div className="inline-flex rounded-md shadow-xs" role="group">
-                {(['ALL', 'PROTOTYPE_ONLY', 'IMPORTED_ONLY'] as const).map((m) => (
-                  <button
-                    key={m}
-                    type="button"
-                    onClick={() => {
-                      if (onSelectDataMode) {
-                        onSelectDataMode(m);
-                      } else {
-                        marketDataService.setActiveDataMode(m);
-                        onDatasetChanged();
-                      }
-                    }}
-                    className={`px-2 py-0.5 text-[10px] font-mono font-bold border transition-colors ${
-                      effectiveMode === m
-                        ? 'bg-slate-900 text-white border-slate-900'
-                        : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
-                    } ${m === 'ALL' ? 'rounded-l-md' : ''} ${m === 'IMPORTED_ONLY' ? 'rounded-r-md' : ''}`}
-                  >
-                    {m === 'ALL' ? 'All Stored' : m === 'PROTOTYPE_ONLY' ? 'Prototype' : 'Imported Only'}
-                  </button>
-                ))}
+      {/* Compact Active Dataset Summary Panel */}
+      <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-5 shadow-sm space-y-3">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          {/* Primary Summary Metrics */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 sm:gap-6 text-xs">
+            {/* 1. Valid Observations in Selected Mode */}
+            <div className="space-y-0.5">
+              <div className="text-[10px] uppercase font-mono font-semibold tracking-wider text-slate-500">
+                Mode Observations
               </div>
-              <span className="text-slate-400">•</span>
-              <span>Date Range: <span className="font-mono font-bold">{activeMetadata.dateRange.start}</span> to <span className="font-mono font-bold">{activeMetadata.dateRange.end}</span> ({activeMetadata.validRows} observations in mode, {modeDistinctDates.length} trading date{modeDistinctDates.length === 1 ? '' : 's'})</span>
+              <div className="text-lg font-bold font-mono text-slate-900">
+                {activeMetadata.validRows.toLocaleString()} <span className="text-xs font-normal text-slate-500">valid rows</span>
+              </div>
             </div>
 
-            {/* Discrete Provenance Breakdown Pills */}
-            <div className="flex items-center gap-2 pt-1 text-[11px] font-mono flex-wrap">
-              <span className="text-slate-500 font-sans font-semibold text-[10px]">Total Stored:</span>
-              <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-800 border border-slate-200 text-[10px] font-bold">
-                {totalStoredRecords} Stored Records
-              </span>
-              <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-200 text-[10px]">
-                {prototypeStoredCount} Prototype Sim
-              </span>
-              <span className="px-2 py-0.5 rounded bg-sky-100 text-sky-900 border border-sky-200 text-[10px]">
-                {importedStoredCount} User-Imported
-              </span>
+            {/* 2. Distinct Trading Dates and Date Range */}
+            <div className="space-y-0.5">
+              <div className="text-[10px] uppercase font-mono font-semibold tracking-wider text-slate-500">
+                Trading Dates
+              </div>
+              <div className="text-sm font-bold font-mono text-slate-900">
+                {modeDistinctDates.length} {modeDistinctDates.length === 1 ? 'Trading Date' : 'Trading Dates'}
+              </div>
+              <div className="text-[11px] font-mono text-slate-600">
+                {formattedDateRange}
+              </div>
+            </div>
+
+            {/* 3. Accepted & Rejected / Quarantined Counts */}
+            <div className="space-y-0.5 col-span-2 sm:col-span-1">
+              <div className="text-[10px] uppercase font-mono font-semibold tracking-wider text-slate-500">
+                Import Quality Status
+              </div>
+              <div className="text-sm font-mono flex items-center gap-2">
+                <span className="font-bold text-emerald-700">
+                  {activeMetadata.validRows.toLocaleString()} Accepted
+                </span>
+                {activeMetadata.rejectedRows > 0 ? (
+                  <span className="text-rose-700 font-medium">
+                    • {activeMetadata.rejectedRows.toLocaleString()} Quarantined
+                  </span>
+                ) : (
+                  <span className="text-slate-400 font-medium">
+                    • 0 Quarantined
+                  </span>
+                )}
+              </div>
               {activeMetadata.rejectedRows > 0 && (
-                <span className="px-2 py-0.5 rounded bg-rose-100 text-rose-900 border border-rose-200 text-[10px]">
-                  {activeMetadata.rejectedRows} Rejected
-                </span>
+                <div className="text-[10px] text-slate-500 font-mono">
+                  Quarantined non-gold/options records
+                </div>
               )}
             </div>
+          </div>
 
-            {/* Cryptographic SHA-256 and Storage Persistence Chips */}
-            <div className="flex items-center gap-2 pt-1 flex-wrap">
-              <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-white/90 border border-slate-200 text-[10px] font-mono text-slate-700 shadow-xs">
-                <Hash className="w-3 h-3 text-slate-500" />
-                <span>SHA-256:</span>
-                <span className="font-bold text-slate-900 truncate max-w-[140px] sm:max-w-[220px]" title={activeMetadata.fileHashSha256}>
-                  {activeMetadata.fileHashSha256 ? activeMetadata.fileHashSha256.slice(0, 18) + '...' : 'sim_deterministic_seed'}
-                </span>
-              </div>
+          {/* Compact Secondary Actions Area */}
+          <div className="flex items-center gap-2 flex-wrap shrink-0 border-t md:border-t-0 pt-3 md:pt-0 border-slate-100">
+            {activeMetadata.isUserAttested ? (
+              <button
+                onClick={handleRevokeAttestation}
+                className="px-2.5 py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-lg text-xs font-mono transition-colors shadow-xs flex items-center gap-1.5 cursor-pointer"
+                title="Revoke user attestation and return dataset to unverified"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>Revoke Attestation</span>
+              </button>
+            ) : (activeProvenance === 'USER-IMPORTED DATA — SOURCE UNVERIFIED' || activeProvenance === 'HYBRID / MIXED PROVENANCE') && (
+              <button
+                onClick={() => setShowAttestationModal(true)}
+                className="px-2.5 py-1.5 bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-300 rounded-lg text-xs font-mono font-medium transition-colors shadow-xs flex items-center gap-1.5 cursor-pointer"
+                title="Record user assertion of source origin (not independently verified)"
+              >
+                <FileText className="w-3.5 h-3.5 text-teal-700" />
+                <span>Source Attestation</span>
+              </button>
+            )}
 
-              <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-white/90 border border-slate-200 text-[10px] font-mono text-slate-700 shadow-xs">
-                <HardDrive className="w-3 h-3 text-slate-500" />
-                <span>Storage:</span>
-                <span className="font-bold text-slate-900">
-                  {activeMetadata.storagePersistence || 'SESSION_MEMORY'}
-                </span>
-              </div>
-            </div>
+            <button
+              onClick={handleDownloadDataReport}
+              className="px-2.5 py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-lg text-xs font-mono transition-colors shadow-xs flex items-center gap-1.5 cursor-pointer"
+              title="Download comprehensive quality audit with cryptographic digest and provenance"
+            >
+              <Download className="w-3.5 h-3.5 text-slate-600" />
+              <span>Audit JSON</span>
+            </button>
 
-            {activeMetadata.attestationNotes && (
-              <div className="text-[11px] text-teal-900 font-mono mt-0.5 italic">
-                Attestation: {activeMetadata.attestationNotes} ({activeMetadata.attestationTimestamp?.slice(0, 10)})
-              </div>
+            {marketDataService.hasPersistedData() && (
+              <button
+                onClick={handleClearLocalStorage}
+                className="px-2.5 py-1.5 bg-white hover:bg-rose-50 text-rose-700 border border-rose-200 rounded-lg text-xs font-mono transition-colors shadow-xs flex items-center gap-1.5 cursor-pointer"
+                title="Clear dataset stored in browser localStorage and reset"
+              >
+                <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                <span>Clear Stored Data</span>
+              </button>
             )}
           </div>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap self-start sm:self-auto">
-          {(activeProvenance === 'USER-IMPORTED DATA — SOURCE UNVERIFIED' || activeProvenance === 'HYBRID / MIXED PROVENANCE') && (
-            <button
-              onClick={() => setShowAttestationModal(true)}
-              className="px-3 py-1.5 bg-teal-700 hover:bg-teal-800 text-white rounded-md text-xs font-mono font-bold shadow-sm transition-colors flex items-center gap-1.5"
-              title="Record user assertion of source origin (not independently verified)"
-            >
-              <FileText className="w-3.5 h-3.5" />
-              <span>Record Source Attestation</span>
-            </button>
-          )}
-
-          {activeProvenance === 'USER-ATTESTED SOURCE — NOT INDEPENDENTLY VERIFIED' && (
-            <button
-              onClick={handleRevokeAttestation}
-              className="px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-md text-xs font-mono font-medium shadow-sm transition-colors flex items-center gap-1.5"
-              title="Revoke user attestation and return dataset to unverified"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-              <span>Revoke Attestation</span>
-            </button>
-          )}
-
-          {marketDataService.hasPersistedData() && (
-            <button
-              onClick={handleClearLocalStorage}
-              className="px-3 py-1.5 bg-white hover:bg-rose-50 text-rose-700 border border-rose-200 rounded-md text-xs font-mono font-medium shadow-xs transition-colors flex items-center gap-1.5"
-              title="Clear dataset stored in browser localStorage and reset"
-            >
-              <Trash2 className="w-3.5 h-3.5 text-rose-600" />
-              <span>Clear Local Storage</span>
-            </button>
-          )}
-
-          <button
-            onClick={handleDownloadDataReport}
-            className="px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 rounded-md text-xs font-mono font-medium shadow-sm transition-colors flex items-center gap-1.5"
-          >
-            <Download className="w-3.5 h-3.5 text-slate-600" />
-            <span>Download Quality Audit</span>
-          </button>
+        {/* Single Concise Source-Verification Warning */}
+        <div className="pt-2 border-t border-slate-100 text-[11px] text-slate-500 flex items-center gap-1.5 font-mono">
+          <Info className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+          <span>
+            {effectiveMode === 'PROTOTYPE_ONLY'
+              ? 'Notice: Operating on calibrated prototype simulation records for architectural demonstration.'
+              : effectiveMode === 'IMPORTED_ONLY'
+              ? 'Notice: User-imported datasets reflect local client files and are not independently verified by exchange authority.'
+              : 'Notice: Multi-source dataset with strict single-provenance quarantine for all statistical distributions.'}
+          </span>
         </div>
       </div>
 
@@ -698,16 +656,6 @@ export const DataLab: React.FC<DataLabProps> = ({
               <ShieldCheck className="w-4 h-4 text-amber-600" />
               Data Provenance & Quantitative Limitations
             </h4>
-
-            <div className="p-3 rounded-lg bg-amber-50/80 border border-amber-200 text-xs text-amber-950 space-y-1">
-              <div className="font-bold flex items-center gap-1.5 text-amber-900 font-mono text-[11px] uppercase">
-                <AlertTriangle className="w-3.5 h-3.5 text-amber-700" />
-                <span>Verification Scope & Honesty Disclosure</span>
-              </div>
-              <p className="leading-relaxed">
-                Uploading a file and recording a source attestation does not independently verify that the file originated from MCX. AUREX currently has no independent official-source verification mechanism. User-attested datasets remain independently unverified.
-              </p>
-            </div>
 
             {/* Separate Guidance for Each Dataset Type */}
             <div className="space-y-1.5 pt-1 text-xs">
