@@ -54,7 +54,7 @@ export function evaluateDecision(inputs: DecisionEngineInputs): DecisionResult {
     decision = 'NO TRADE';
     const deficit = Math.abs(netEdge);
     rationale = `Theoretical opportunity does not survive estimated execution friction. Theoretical edge of ₹${expectedEdge.toFixed(2)} is exceeded by transaction hurdles (₹${totalFriction.toFixed(2)}), resulting in a net deficit of ₹${deficit.toFixed(2)}/10g.`;
-    triggerRules.push(`Rule 2 Triggered: Expected Edge (₹${expectedEdge}) â‰¤ Total Friction (₹${totalFriction})`);
+    triggerRules.push(`Rule 2 Triggered: Expected Edge (₹${expectedEdge}) ≤ Total Friction (₹${totalFriction})`);
     triggerRules.push(`Cost Integrity Rule: Reject false signals where slippage, taxes, haircut & buffer consume the theoretical edge.`);
   }
   // 3. Borderline liquidity check (Watchlist / pending confirmation)
@@ -68,7 +68,7 @@ export function evaluateDecision(inputs: DecisionEngineInputs): DecisionResult {
   else {
     decision = 'ACTIONABLE';
     rationale = `Observed relative-value edge survives liquidity and estimated execution friction. Dislocation of ₹${expectedEdge.toFixed(2)}/10g yields net defensible edge of +₹${netEdge.toFixed(2)}/10g with confirmed liquidity depth (${liquidityScore}/100).`;
-    triggerRules.push(`Rule 4 Triggered: Net Edge (+₹${netEdge}/10g) > 0 and Liquidity Grade = PASS (${liquidityScore} â‰¥ ${friction.liquidityThresholdScore})`);
+    triggerRules.push(`Rule 4 Triggered: Net Edge (+₹${netEdge}/10g) > 0 and Liquidity Grade = PASS (${liquidityScore} ≥ ${friction.liquidityThresholdScore})`);
     triggerRules.push(`Actionable Signal: Dislocation exceeds all transaction hurdles with sufficient depth.`);
   }
 

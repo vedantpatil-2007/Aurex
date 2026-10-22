@@ -331,7 +331,7 @@ export const FuturesCurveCard: React.FC<FuturesCurveCardProps> = ({
                       <Clock className="w-3.5 h-3.5 text-amber-600" />
                       Roll-Down Decomposition ({targetTenor}D Constant Tenor)
                     </span>
-                    <span className="text-[10px] text-slate-500">{rollDownDecomp.datePrevious} â†’ {rollDownDecomp.dateCurrent}</span>
+                    <span className="text-[10px] text-slate-500">{rollDownDecomp.datePrevious} → {rollDownDecomp.dateCurrent}</span>
                   </div>
 
                   <div className="grid grid-cols-3 gap-2 text-center font-mono pt-1">

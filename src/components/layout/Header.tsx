@@ -23,6 +23,9 @@ interface HeaderProps {
   decision?: DecisionResult;
   metadata?: DatasetMetadata;
   onToggleMobileMenu?: () => void;
+  availableDates?: string[];
+  onSelectDate?: (date: string) => void;
+  latestAvailableDate?: string;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -30,7 +33,10 @@ export const Header: React.FC<HeaderProps> = ({
   selectedPair,
   decision,
   metadata,
-  onToggleMobileMenu
+  onToggleMobileMenu,
+  availableDates,
+  onSelectDate,
+  latestAvailableDate
 }) => {
   const [isAlertDrawerOpen, setIsAlertDrawerOpen] = useState(false);
   const [alerts, setAlerts] = useState<PlatformAlert[]>([]);
@@ -96,10 +102,37 @@ export const Header: React.FC<HeaderProps> = ({
           </span>
         </div>
 
-        {/* Observation date */}
+        {/* Observation As-Of date selector */}
         <div className="flex items-center gap-1.5 text-xs text-slate-600 bg-slate-50 px-2.5 py-1 rounded border border-slate-200">
           <Calendar className="w-3.5 h-3.5 text-slate-400" />
-          <span className="font-mono font-medium text-slate-700">{currentDate}</span>
+          {availableDates && onSelectDate && availableDates.length > 1 ? (
+            <div className="flex items-center gap-1.5">
+              <span className="text-slate-400 font-medium text-[10px] hidden sm:inline">As-Of:</span>
+              <select
+                value={currentDate}
+                onChange={e => onSelectDate(e.target.value)}
+                className="bg-transparent font-mono font-bold text-slate-800 text-xs focus:outline-none cursor-pointer"
+                title="Select historical As-Of valuation date"
+              >
+                {availableDates.map(d => (
+                  <option key={d} value={d}>
+                    {d} {d === latestAvailableDate ? '(Latest)' : ''}
+                  </option>
+                ))}
+              </select>
+              {latestAvailableDate && currentDate !== latestAvailableDate && (
+                <button
+                  onClick={() => onSelectDate(latestAvailableDate)}
+                  className="px-1.5 py-0.5 rounded bg-amber-500 hover:bg-amber-600 text-slate-950 font-mono font-bold text-[10px] transition-colors shadow-xs ml-1"
+                  title="Jump to latest available market observation"
+                >
+                  Jump to Latest
+                </button>
+              )}
+            </div>
+          ) : (
+            <span className="font-mono font-medium text-slate-700">{currentDate}</span>
+          )}
         </div>
 
         {/* Workstream 6: Notification Bell & Alert Center */}

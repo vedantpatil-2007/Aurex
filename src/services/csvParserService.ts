@@ -307,6 +307,7 @@ export function parseBhavcopyCsv(
     strikePrice: mapping.strikePriceCol ? rawHeaders.indexOf(mapping.strikePriceCol) : -1
   };
 
+  const fileHashSha256 = knownFileHash || computeQuickHash(csvContent);
   const validRecords: MarketObservation[] = [];
   const rejectedRows: RejectedRow[] = [];
   const uniqueKeys = new Set<string>();
@@ -447,7 +448,10 @@ export function parseBhavcopyCsv(
       low: Number(low.toFixed(2)),
       close: Number(close.toFixed(2)),
       volume,
-      openInterest
+      openInterest,
+      provenance,
+      sourceFile: sourceFilename,
+      sourceSha256: fileHashSha256
     });
   }
 
@@ -482,8 +486,6 @@ export function parseBhavcopyCsv(
     start: allDates[0] || 'N/A',
     end: allDates[allDates.length - 1] || 'N/A'
   };
-
-  const fileHashSha256 = knownFileHash || computeQuickHash(csvContent);
 
   const metadata: DatasetMetadata = {
     provenance,

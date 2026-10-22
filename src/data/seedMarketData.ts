@@ -18,6 +18,25 @@ function generateDeterministicSeedData(): MarketObservation[] {
   const records: MarketObservation[] = [];
   const tradingDates: string[] = [];
 
+  const pushRecord = (item: {
+    date: string;
+    symbol: MarketObservation['symbol'];
+    expiryDate: string;
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+    volume: number;
+    openInterest: number;
+  }) => {
+    records.push({
+      ...item,
+      provenance: 'PROTOTYPE SIMULATION',
+      sourceFile: 'seed_prototype_simulation.internal',
+      sourceSha256: 'sim_deterministic_seed_f7c9e0114a8b29f0'
+    });
+  };
+
   // Generate 60 trading days leading up to 2026-10-08
   const startDate = new Date('2026-07-15');
   const endDate = new Date('2026-10-08');
@@ -65,7 +84,7 @@ function generateDeterministicSeedData(): MarketObservation[] {
     const goldmVol = 9500 + Math.floor(Math.sin(index * 0.5) * 3200) + ((index * 109) % 2000);
     const goldmOI = 15200 + index * 60 + ((index * 73) % 1500);
 
-    records.push({
+    pushRecord({
       date,
       symbol: 'GOLDM',
       expiryDate: '2026-11-05',
@@ -86,7 +105,7 @@ function generateDeterministicSeedData(): MarketObservation[] {
     const goldmNextVol = Math.floor(goldmVol * 0.32);
     const goldmNextOI = Math.floor(goldmOI * 0.42);
 
-    records.push({
+    pushRecord({
       date,
       symbol: 'GOLDM',
       expiryDate: '2026-12-05',
@@ -107,7 +126,7 @@ function generateDeterministicSeedData(): MarketObservation[] {
     const goldmFarVol = Math.floor(goldmVol * 0.12);
     const goldmFarOI = Math.floor(goldmOI * 0.20);
 
-    records.push({
+    pushRecord({
       date,
       symbol: 'GOLDM',
       expiryDate: '2027-02-05',
@@ -130,7 +149,7 @@ function generateDeterministicSeedData(): MarketObservation[] {
     const goldtenVol = 3200 + Math.floor(Math.sin(index * 0.4) * 900) + ((index * 53) % 700);
     const goldtenOI = 4800 + index * 25 + ((index * 31) % 500);
 
-    records.push({
+    pushRecord({
       date,
       symbol: 'GOLDTEN',
       expiryDate: '2026-10-30',
@@ -151,7 +170,7 @@ function generateDeterministicSeedData(): MarketObservation[] {
     const goldtenNextVol = Math.floor(goldtenVol * 0.28);
     const goldtenNextOI = Math.floor(goldtenOI * 0.38);
 
-    records.push({
+    pushRecord({
       date,
       symbol: 'GOLDTEN',
       expiryDate: '2026-11-27',
@@ -174,7 +193,7 @@ function generateDeterministicSeedData(): MarketObservation[] {
     const guineaVol = 650 + Math.floor(Math.sin(index * 0.3) * 220) + ((index * 29) % 180);
     const guineaOI = 1250 + index * 10 + ((index * 17) % 200);
 
-    records.push({
+    pushRecord({
       date,
       symbol: 'GOLDGUINEA',
       expiryDate: '2026-10-30',
@@ -197,7 +216,7 @@ function generateDeterministicSeedData(): MarketObservation[] {
     const petalVol = 1250 + Math.floor(Math.sin(index * 0.45) * 350) + ((index * 41) % 300);
     const petalOI = 2100 + index * 18 + ((index * 23) % 300);
 
-    records.push({
+    pushRecord({
       date,
       symbol: 'GOLDPETAL',
       expiryDate: '2026-10-30',

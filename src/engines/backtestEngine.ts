@@ -16,7 +16,7 @@ import { evaluatePairLifecycleEligibility } from './lifecycleEngine';
  *
  * Strict Zero Look-Ahead Bias:
  * - Observations are processed strictly in chronological order.
- * - Rolling statistical parameters (Î¼, Ïƒ, Z-score) at step t are calibrated
+ * - Rolling statistical parameters (μ, σ, Z-score) at step t are calibrated
  *   using ONLY data from the historical window [t - warmUpDays, t - 1].
  * - Future observations cannot leak into historical decisions.
  * - Realistic trade accounting: entry friction, exit friction, exposure matching,

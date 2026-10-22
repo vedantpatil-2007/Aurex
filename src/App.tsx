@@ -11,7 +11,8 @@ import {
   ContractSymbol,
   FrictionAssumptions,
   NormalizedObservation,
-  MarketObservation
+  MarketObservation,
+  DataMode
 } from './types/market';
 
 // Pages
@@ -76,6 +77,7 @@ export function App() {
 
   // Market Data Reactive State & Subscription
   const [dataVersion, setDataVersion] = useState(0);
+  const [dataMode, setDataMode] = useState<DataMode>('ALL');
 
   useEffect(() => {
     const unsubscribe = marketDataService.subscribe(() => {
@@ -85,20 +87,19 @@ export function App() {
   }, []);
 
   const rawObservations = useMemo<MarketObservation[]>(() => {
-    return marketDataService.getHistoricalData();
-  }, [dataVersion]);
+    return marketDataService.getHistoricalData({ dataMode });
+  }, [dataVersion, dataMode]);
 
   const normalizedObservations = useMemo<NormalizedObservation[]>(() => {
-    return marketDataService.getNormalizedHistoricalData();
-  }, [dataVersion]);
-
-  const latestObservations = useMemo(() => {
-    return marketDataService.getLatestObservations();
-  }, [dataVersion]);
+    return marketDataService.getNormalizedHistoricalData({ dataMode });
+  }, [dataVersion, dataMode]);
 
   const availableDates = useMemo(() => {
-    return marketDataService.getAvailableDates();
-  }, [dataVersion]);
+    const dates = Array.from(new Set(rawObservations.map(o => o.date)));
+    return dates.sort((a, b) => a.localeCompare(b));
+  }, [rawObservations]);
+
+  const latestAvailableDate = availableDates[availableDates.length - 1] || '2026-10-08';
 
   const [selectedDate, setSelectedDate] = useState<string>(() => {
     return availableDates.slice(-1)[0] || '2026-10-08';
@@ -110,6 +111,15 @@ export function App() {
       setSelectedDate(availableDates[availableDates.length - 1]);
     }
   }, [availableDates, selectedDate]);
+
+  // As-Of observations strictly quarantined through selectedDate to prevent look-ahead bias
+  const asOfNormalizedObservations = useMemo(() => {
+    return normalizedObservations.filter(o => o.date <= selectedDate);
+  }, [normalizedObservations, selectedDate]);
+
+  const asOfLatestObservations = useMemo(() => {
+    return marketDataService.getLatestObservations(selectedDate);
+  }, [dataVersion, selectedDate, dataMode]);
 
   const provenance = marketDataService.getProvenance();
   const datasetMetadata = marketDataService.getMetadata();
@@ -190,29 +200,29 @@ export function App() {
     return marketDataService.getDataHealthSummary();
   }, [dataVersion, rawObservations]);
 
-  // Active Pair Aligned Series
+  // Active Pair Aligned Series evaluated As-Of selectedDate (zero look-ahead leakage)
   const seriesA = useMemo(() => {
-    return normalizedObservations.filter(o => o.symbol === selectedPair[0]);
-  }, [normalizedObservations, selectedPair]);
+    return asOfNormalizedObservations.filter(o => o.symbol === selectedPair[0]);
+  }, [asOfNormalizedObservations, selectedPair]);
 
   const seriesB = useMemo(() => {
-    return normalizedObservations.filter(o => o.symbol === selectedPair[1]);
-  }, [normalizedObservations, selectedPair]);
+    return asOfNormalizedObservations.filter(o => o.symbol === selectedPair[1]);
+  }, [asOfNormalizedObservations, selectedPair]);
 
   const pairSpreadSeries = useMemo(() => {
     return buildPairSpreadSeries(seriesA, seriesB, selectedPair[0], selectedPair[1]);
   }, [seriesA, seriesB, selectedPair]);
 
-  // Current Spread observed
+  // Current Spread observed As-Of selectedDate
   const latestPairSpread = useMemo(() => {
     if (pairSpreadSeries.length === 0) return 0;
     return pairSpreadSeries[pairSpreadSeries.length - 1].spread;
   }, [pairSpreadSeries]);
 
-  // Evaluate Decision Engine dynamically
+  // Evaluate Decision Engine dynamically with strictly As-Of inputs
   const decisionResult = useMemo(() => {
-    const latestA = latestObservations[selectedPair[0]];
-    const latestB = latestObservations[selectedPair[1]];
+    const latestA = asOfLatestObservations[selectedPair[0]];
+    const latestB = asOfLatestObservations[selectedPair[1]];
 
     return evaluateDecision({
       pair: selectedPair,
@@ -224,7 +234,7 @@ export function App() {
       oiB: latestB?.openInterest || 0,
       friction
     });
-  }, [selectedPair, latestPairSpread, manualEdge, latestObservations, friction]);
+  }, [selectedPair, latestPairSpread, manualEdge, asOfLatestObservations, friction]);
 
   return (
     <div className="min-h-screen flex bg-slate-100 font-sans text-slate-800 overflow-x-hidden">
@@ -238,13 +248,16 @@ export function App() {
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 overflow-x-hidden">
-        {/* Header with Mobile Hamburger */}
+        {/* Header with Mobile Hamburger & As-Of Date Selector */}
         <Header
           currentDate={selectedDate}
           selectedPair={selectedPair}
           decision={decisionResult}
           metadata={datasetMetadata}
           onToggleMobileMenu={() => setIsMobileMenuOpen(prev => !prev)}
+          availableDates={availableDates}
+          onSelectDate={setSelectedDate}
+          latestAvailableDate={latestAvailableDate}
         />
 
         {/* Interactive Judge Demo Stepper Bar */}
@@ -272,7 +285,7 @@ export function App() {
         <main className="flex-1 p-3 sm:p-5 md:p-6 lg:p-8 max-w-7xl w-full mx-auto min-w-0">
           {activePage === 'overview' && (
             <Overview
-              latestData={latestObservations}
+              latestData={asOfLatestObservations}
               selectedPair={selectedPair}
               onPairChange={setSelectedPair}
               selectedContract={selectedContract}
@@ -295,7 +308,7 @@ export function App() {
 
           {activePage === 'contracts' && (
             <Contracts
-              observations={normalizedObservations}
+              observations={asOfNormalizedObservations}
               selectedSymbol={selectedContract}
               onSelectContract={setSelectedContract}
               onNavigate={handleNavigate}
@@ -304,7 +317,7 @@ export function App() {
 
           {activePage === 'normalization' && (
             <Normalization
-              observations={normalizedObservations}
+              observations={asOfNormalizedObservations}
               selectedContract={selectedContract}
               onSelectContract={setSelectedContract}
               availableDates={availableDates}
@@ -316,7 +329,7 @@ export function App() {
 
           {activePage === 'relative-value' && (
             <RelativeValue
-              observations={normalizedObservations}
+              observations={asOfNormalizedObservations}
               selectedPair={selectedPair}
               onPairChange={setSelectedPair}
               onNavigate={handleNavigate}
@@ -325,8 +338,8 @@ export function App() {
 
           {activePage === 'ledger' && (
             <Ledger
-              latestData={latestObservations}
-              allObservations={normalizedObservations}
+              latestData={asOfLatestObservations}
+              allObservations={asOfNormalizedObservations}
               selectedPair={selectedPair}
               onPairChange={setSelectedPair}
               friction={friction}
@@ -342,7 +355,7 @@ export function App() {
 
           {activePage === 'validation' && (
             <Validation
-              observations={normalizedObservations}
+              observations={asOfNormalizedObservations}
               selectedPair={selectedPair}
               friction={friction}
               onNavigate={handleNavigate}

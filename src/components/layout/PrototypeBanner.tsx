@@ -19,11 +19,14 @@ export const PrototypeBanner: React.FC<PrototypeBannerProps> = ({
   const isAttested = provenance === 'USER-ATTESTED SOURCE — NOT INDEPENDENTLY VERIFIED';
   const isUserImported = provenance === 'USER-IMPORTED DATA — SOURCE UNVERIFIED';
   const isSample = provenance === 'PROTOTYPE SAMPLE — UNVERIFIED SOURCING';
+  const isHybrid = provenance === 'HYBRID / MIXED PROVENANCE';
 
   const badgeColor = isOfficial
     ? 'bg-emerald-600 text-white'
     : isAttested
     ? 'bg-teal-700 text-white'
+    : isHybrid
+    ? 'bg-purple-700 text-white font-bold'
     : isUserImported
     ? 'bg-sky-700 text-white'
     : isSample
@@ -34,6 +37,8 @@ export const PrototypeBanner: React.FC<PrototypeBannerProps> = ({
     ? 'bg-emerald-50/70 border-emerald-200 text-emerald-950'
     : isAttested
     ? 'bg-teal-50/70 border-teal-200 text-teal-950'
+    : isHybrid
+    ? 'bg-purple-50/70 border-purple-200 text-purple-950'
     : isUserImported
     ? 'bg-sky-50/70 border-sky-200 text-sky-950'
     : isSample
@@ -52,6 +57,8 @@ export const PrototypeBanner: React.FC<PrototypeBannerProps> = ({
             <span>Verified official MCX Daily Bhavcopy settlement dataset with discrete contracts (source verified).</span>
           ) : isAttested ? (
             <span>User-attested file: <strong className="font-mono">{filename || 'custom_bhavcopy.csv'}</strong>. User asserted source origin; NOT independently verified.</span>
+          ) : isHybrid ? (
+            <span>Hybrid dataset: discrete prototype simulation records combined with user-imported records (source unverified).</span>
           ) : isUserImported ? (
             <span>User-provided file: <strong className="font-mono">{filename || 'custom_bhavcopy.csv'}</strong>. Parsed and checked; official origin unverified.</span>
           ) : isSample ? (

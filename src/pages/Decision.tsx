@@ -78,6 +78,17 @@ export const Decision: React.FC<DecisionPageProps> = ({
     });
   };
 
+  const resetToLiveMarket = () => {
+    onManualEdgeChange(undefined);
+    onFrictionChange({
+      slippagePer10g: 25,
+      brokerageTaxesPer10g: 35,
+      liquidityHaircutPer10g: 15,
+      costBufferPer10g: 20,
+      liquidityThresholdScore: 50
+    });
+  };
+
   return (
     <div className="space-y-6">
       {/* Page Title & Context */}
@@ -145,8 +156,33 @@ export const Decision: React.FC<DecisionPageProps> = ({
           >
             Preset 3: No Trade (Hurdle Fails)
           </button>
+          <button
+            onClick={resetToLiveMarket}
+            className="px-2.5 py-1 text-xs font-semibold rounded bg-amber-500 hover:bg-amber-400 text-slate-950 transition-colors font-mono font-bold"
+            title="Reset manual overrides and evaluate live market spread"
+          >
+            Reset to Live Market
+          </button>
         </div>
       </div>
+
+      {/* Sandbox Notice Banner */}
+      {manualEdge !== undefined && (
+        <div className="bg-amber-50 border border-amber-300 rounded-xl p-3 flex flex-wrap items-center justify-between gap-2 text-xs text-amber-950">
+          <div className="flex items-center gap-2">
+            <span className="font-mono font-bold uppercase px-2 py-0.5 rounded bg-amber-200 text-amber-900 text-[10px]">
+              What-If Sandbox Active
+            </span>
+            <span>Manual Expected Edge override of ₹{manualEdge.toFixed(2)}/10g is active. Live market spread is ₹{calculatedSpread.toFixed(2)}/10g.</span>
+          </div>
+          <button
+            onClick={resetToLiveMarket}
+            className="font-mono font-bold underline text-amber-900 hover:text-amber-950 text-xs ml-auto"
+          >
+            Clear Override & Restore Live Spread
+          </button>
+        </div>
+      )}
 
       {/* Visual Pipeline Flow */}
       <DecisionPipelineVisual decisionResult={decisionResult} />

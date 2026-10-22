@@ -1,4 +1,5 @@
 export type ContractSymbol = 'GOLDM' | 'GOLDTEN' | 'GOLDGUINEA' | 'GOLDPETAL';
+export type DataMode = 'ALL' | 'PROTOTYPE_ONLY' | 'IMPORTED_ONLY';
 
 export interface ContractSpecification {
   symbol: ContractSymbol;
@@ -6,7 +7,7 @@ export interface ContractSpecification {
   contractSizeGrams: number; // in grams
   quoteUnitGrams: number;     // in grams
   purityPermille: number;     // 995 or 999
-  expiryScheduleDesc: string; // e.g. "3rdâ€“5th of month" or "27thâ€“31st of month"
+  expiryScheduleDesc: string; // e.g. "3rd–5th of month" or "27th–31st of month"
   tickSize: number;           // ₹
   tradingLotDescription: string;
   deliveryUnit: string;
@@ -26,6 +27,9 @@ export interface MarketObservation {
   close: number;
   volume: number;
   openInterest: number;
+  provenance?: DataProvenance;
+  sourceFile?: string;
+  sourceSha256?: string;
 }
 
 export type ContractLifecycleStage = 'NORMAL' | 'NEAR_EXPIRY' | 'ROLL_WINDOW';
@@ -70,6 +74,9 @@ export interface ZScoreAnalysis {
   minSpread: number;
   maxSpread: number;
   series: RelativeValueSpreadPoint[];
+  isCalculable?: boolean;
+  incalculableReason?: string;
+  rollingWindowDays?: number;
 }
 
 export type LiquidityGrade = 'PASS' | 'BORDERLINE' | 'FAIL';
@@ -141,7 +148,8 @@ export type DataProvenance =
   | 'PROTOTYPE SAMPLE — UNVERIFIED SOURCING'
   | 'USER-IMPORTED DATA — SOURCE UNVERIFIED'
   | 'USER-ATTESTED SOURCE — NOT INDEPENDENTLY VERIFIED'
-  | 'OFFICIAL MCX DATA — SOURCE VERIFIED';
+  | 'OFFICIAL MCX DATA — SOURCE VERIFIED'
+  | 'HYBRID / MIXED PROVENANCE';
 
 export interface ContractCoverageItem {
   count: number;
@@ -182,8 +190,15 @@ export interface MergeAnalysis {
   isAccumulating: boolean;
 }
 
+export interface ProvenanceBreakdown {
+  prototypeSimulationCount: number;
+  userImportedCount: number;
+  officialVerifiedCount: number;
+}
+
 export interface DatasetMetadata {
   provenance: DataProvenance;
+  provenanceBreakdown?: ProvenanceBreakdown;
   filename?: string;
   fileHashSha256?: string;
   sourceUrl?: string;
@@ -215,6 +230,7 @@ export interface RejectedRow {
 export interface DataHealthSummary {
   source: string;
   provenance: DataProvenance;
+  provenanceBreakdown?: ProvenanceBreakdown;
   totalRecords: number;
   validRecords: number;
   rejectedRecords: number;

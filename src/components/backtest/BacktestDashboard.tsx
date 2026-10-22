@@ -93,7 +93,7 @@ export const BacktestDashboard: React.FC<BacktestDashboardProps> = ({
               Chronological Trade-Level Simulation
             </h3>
             <p className="text-xs text-slate-500 mt-0.5">
-              Replays daily market settlements chronologically. Rolling parameters (Î¼, Ïƒ, Z) at step t use historical data only.
+              Replays daily market settlements chronologically. Rolling parameters (μ, σ, Z) at step t use historical data only.
             </p>
           </div>
 
@@ -111,7 +111,7 @@ export const BacktestDashboard: React.FC<BacktestDashboardProps> = ({
           <div className="space-y-1.5 bg-slate-50 border border-slate-200/80 p-3 rounded-lg">
             <div className="flex justify-between font-mono">
               <span className="text-slate-600">Entry Threshold:</span>
-              <span className="font-bold text-slate-900">|Z| â‰¥ {entryZ.toFixed(1)}Ïƒ</span>
+              <span className="font-bold text-slate-900">|Z| ≥ {entryZ.toFixed(1)}σ</span>
             </div>
             <input
               type="range" min="0.8" max="2.5" step="0.1" value={entryZ}
@@ -124,7 +124,7 @@ export const BacktestDashboard: React.FC<BacktestDashboardProps> = ({
           <div className="space-y-1.5 bg-slate-50 border border-slate-200/80 p-3 rounded-lg">
             <div className="flex justify-between font-mono">
               <span className="text-slate-600">Exit / Convergence:</span>
-              <span className="font-bold text-slate-900">Z = {exitZ.toFixed(1)}Ïƒ</span>
+              <span className="font-bold text-slate-900">Z = {exitZ.toFixed(1)}σ</span>
             </div>
             <input
               type="range" min="-0.5" max="0.5" step="0.1" value={exitZ}
@@ -137,7 +137,7 @@ export const BacktestDashboard: React.FC<BacktestDashboardProps> = ({
           <div className="space-y-1.5 bg-slate-50 border border-slate-200/80 p-3 rounded-lg">
             <div className="flex justify-between font-mono">
               <span className="text-slate-600">Stop Loss:</span>
-              <span className="font-bold text-slate-900">|Z| â‰¥ {stopLossZ.toFixed(1)}Ïƒ</span>
+              <span className="font-bold text-slate-900">|Z| ≥ {stopLossZ.toFixed(1)}σ</span>
             </div>
             <input
               type="range" min="1.8" max="4.0" step="0.1" value={stopLossZ}
@@ -370,7 +370,7 @@ export const BacktestDashboard: React.FC<BacktestDashboardProps> = ({
                     <td className="py-2.5 px-3 text-right text-slate-700">{formatINR(trade.entrySpread)}</td>
                     <td className="py-2.5 px-3 text-right text-slate-700">{trade.exitSpread !== undefined ? formatINR(trade.exitSpread) : '—'}</td>
                     <td className="py-2.5 px-3 text-right font-semibold text-slate-800">{formatINR(trade.grossPnL)}</td>
-                    <td className="py-2.5 px-3 text-right text-rose-600">âˆ’{formatINR(trade.totalFriction)}</td>
+                    <td className="py-2.5 px-3 text-right text-rose-600">−{formatINR(trade.totalFriction)}</td>
                     <td className={`py-2.5 px-3 text-right font-bold ${trade.netPnL >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
                       {formatINR(trade.netPnL)}
                     </td>

@@ -251,6 +251,8 @@ export const DataLab: React.FC<DataLabProps> = ({
           ? 'bg-emerald-50 border-emerald-300 text-emerald-950'
           : provenance === 'USER-ATTESTED SOURCE — NOT INDEPENDENTLY VERIFIED'
           ? 'bg-teal-50 border-teal-300 text-teal-950'
+          : provenance === 'HYBRID / MIXED PROVENANCE'
+          ? 'bg-purple-50 border-purple-300 text-purple-950'
           : provenance === 'USER-IMPORTED DATA — SOURCE UNVERIFIED'
           ? 'bg-sky-50 border-sky-300 text-sky-950'
           : provenance === 'PROTOTYPE SAMPLE — UNVERIFIED SOURCING'
@@ -263,6 +265,8 @@ export const DataLab: React.FC<DataLabProps> = ({
               ? 'bg-emerald-600 text-white'
               : provenance === 'USER-ATTESTED SOURCE — NOT INDEPENDENTLY VERIFIED'
               ? 'bg-teal-700 text-white'
+              : provenance === 'HYBRID / MIXED PROVENANCE'
+              ? 'bg-purple-700 text-white'
               : provenance === 'USER-IMPORTED DATA — SOURCE UNVERIFIED'
               ? 'bg-sky-600 text-white'
               : provenance === 'PROTOTYPE SAMPLE — UNVERIFIED SOURCING'
@@ -295,6 +299,24 @@ export const DataLab: React.FC<DataLabProps> = ({
               {metadata.sourceClassification} • Date Range: {metadata.dateRange.start} to {metadata.dateRange.end} ({metadata.validRows ?? metadata.totalRows} observations)
             </div>
 
+            {/* Discrete Provenance Breakdown Pills */}
+            {metadata.provenanceBreakdown && (
+              <div className="flex items-center gap-2 pt-1 text-[11px] font-mono flex-wrap">
+                <span className="text-slate-500 font-sans font-semibold text-[10px]">Composition:</span>
+                <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-200 text-[10px]">
+                  {metadata.provenanceBreakdown.prototypeSimulationCount} Prototype Simulation
+                </span>
+                <span className="px-2 py-0.5 rounded bg-sky-100 text-sky-900 border border-sky-200 text-[10px]">
+                  {metadata.provenanceBreakdown.userImportedCount} User-Imported
+                </span>
+                {metadata.provenanceBreakdown.officialVerifiedCount > 0 && (
+                  <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-900 border border-emerald-200 text-[10px]">
+                    {metadata.provenanceBreakdown.officialVerifiedCount} Verified Official
+                  </span>
+                )}
+              </div>
+            )}
+
             {/* Cryptographic SHA-256 and Storage Persistence Chips */}
             <div className="flex items-center gap-2 pt-1 flex-wrap">
               <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-white/90 border border-slate-200 text-[10px] font-mono text-slate-700 shadow-xs">
@@ -323,7 +345,7 @@ export const DataLab: React.FC<DataLabProps> = ({
         </div>
 
         <div className="flex items-center gap-2 flex-wrap self-start sm:self-auto">
-          {provenance === 'USER-IMPORTED DATA — SOURCE UNVERIFIED' && (
+          {(provenance === 'USER-IMPORTED DATA — SOURCE UNVERIFIED' || provenance === 'HYBRID / MIXED PROVENANCE') && (
             <button
               onClick={() => setShowAttestationModal(true)}
               className="px-3 py-1.5 bg-teal-700 hover:bg-teal-800 text-white rounded-md text-xs font-mono font-bold shadow-sm transition-colors flex items-center gap-1.5"
@@ -924,7 +946,7 @@ export const DataLab: React.FC<DataLabProps> = ({
               <div className="bg-slate-50 p-2.5 rounded border border-slate-200 space-y-1 font-mono text-[11px]">
                 <div>File: <strong className="text-slate-900">{metadata.filename}</strong></div>
                 <div>Imported at: {metadata.importTimestamp}</div>
-                <div>Date Range: {metadata.dateRange.start} â†’ {metadata.dateRange.end}</div>
+                <div>Date Range: {metadata.dateRange.start} → {metadata.dateRange.end}</div>
                 <div>Observations: {metadata.validRows} valid rows</div>
                 <div className="text-slate-600 text-[10px] pt-1 border-t border-slate-200 mt-1">
                   Resulting Classification: <span className="font-bold text-teal-800">USER-ATTESTED SOURCE — NOT INDEPENDENTLY VERIFIED</span>

@@ -106,7 +106,7 @@ export const Validation: React.FC<ValidationPageProps> = ({
               1
             </div>
             <div className="font-mono font-bold text-xs text-slate-900">Training Data</div>
-            <div className="text-[10px] text-slate-500 font-mono">Window t-k â†’ t-1</div>
+            <div className="text-[10px] text-slate-500 font-mono">Window t-k → t-1</div>
             <div className="text-[10px] text-slate-400 leading-tight pt-1">
               Historical calibration slice quarantined from future data
             </div>
@@ -118,7 +118,7 @@ export const Validation: React.FC<ValidationPageProps> = ({
               2
             </div>
             <div className="font-mono font-bold text-xs text-slate-900">Parameter Estimation</div>
-            <div className="text-[10px] text-sky-700 font-mono">In-Sample Fit (Î¼, Ïƒ)</div>
+            <div className="text-[10px] text-sky-700 font-mono">In-Sample Fit (μ, σ)</div>
             <div className="text-[10px] text-slate-400 leading-tight pt-1">
               Parameters calibrated solely on historical training window
             </div>
@@ -142,7 +142,7 @@ export const Validation: React.FC<ValidationPageProps> = ({
               4
             </div>
             <div className="font-mono font-bold text-xs text-slate-900">Net Edge Realization</div>
-            <div className="text-[10px] text-emerald-800 font-mono">Gross âˆ’ Friction</div>
+            <div className="text-[10px] text-emerald-800 font-mono">Gross − Friction</div>
             <div className="text-[10px] text-slate-400 leading-tight pt-1">
               Evaluate edge survival against realistic transaction costs
             </div>
@@ -156,6 +156,24 @@ export const Validation: React.FC<ValidationPageProps> = ({
         selectedPair={selectedPair}
         defaultFriction={friction}
       />
+
+      {/* Distinction & Reconciliation Banner */}
+      <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-xs text-slate-700 space-y-1.5">
+        <div className="font-bold font-mono text-slate-900 uppercase text-[11px] flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-amber-500" />
+          Analytical Methodology Reconciliation: Discrete Trade Simulation vs Rolling Statistical Windows
+        </div>
+        <div className="text-slate-600 leading-relaxed grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+          <div className="bg-white p-2.5 rounded border border-slate-200/80">
+            <span className="font-bold text-slate-900 block font-mono mb-1">1. Discrete Trade Simulator (Above):</span>
+            Models exact round-trip order execution with double friction (entry + exit = 2× hurdle), lot sizing, and tender window forced exit. When candidate signals do not exceed the 2× friction hurdle, 0 trades are executed — achieving 100% capital preservation with ₹0 drawdown.
+          </div>
+          <div className="bg-white p-2.5 rounded border border-slate-200/80">
+            <span className="font-bold text-slate-900 block font-mono mb-1">2. Rolling Window Breakdown (Below):</span>
+            Measures raw one-way statistical spread magnitude across sequential out-of-sample slices. Identifies underlying market dispersion before discrete transaction and round-trip execution constraints are applied.
+          </div>
+        </div>
+      </div>
 
       {/* Aggregate Performance Summary Card */}
       <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-4">

@@ -10,7 +10,9 @@ import {
   ContractCoverageItem,
   ImportedSourceFileMetadata,
   MergeAnalysis,
-  MergeConflictDetail
+  MergeConflictDetail,
+  DataMode,
+  ProvenanceBreakdown
 } from '../types/market';
 import { CONTRACT_SPECIFICATIONS, CONTRACT_LIST } from '../data/contracts';
 import { SEED_MARKET_DATA } from '../data/seedMarketData';
@@ -176,20 +178,56 @@ class MarketDataService {
   }
 
   /**
+   * Returns discrete observation provenance breakdown counts
+   */
+  public getProvenanceBreakdown(): ProvenanceBreakdown {
+    let prototypeSimulationCount = 0;
+    let userImportedCount = 0;
+    let officialVerifiedCount = 0;
+
+    for (const obs of this.localObservations) {
+      if (obs.provenance === 'OFFICIAL MCX DATA — SOURCE VERIFIED') {
+        officialVerifiedCount++;
+      } else if (
+        obs.provenance === 'USER-IMPORTED DATA — SOURCE UNVERIFIED' ||
+        obs.provenance === 'USER-ATTESTED SOURCE — NOT INDEPENDENTLY VERIFIED' ||
+        obs.provenance === 'PROTOTYPE SAMPLE — UNVERIFIED SOURCING'
+      ) {
+        userImportedCount++;
+      } else {
+        prototypeSimulationCount++;
+      }
+    }
+
+    return {
+      prototypeSimulationCount,
+      userImportedCount,
+      officialVerifiedCount
+    };
+  }
+
+  /**
    * Returns dataset metadata
    */
   public getMetadata(): DatasetMetadata {
-    return this.metadata;
+    const breakdown = this.getProvenanceBreakdown();
+    return {
+      ...this.metadata,
+      provenance: this.getProvenance(),
+      provenanceBreakdown: breakdown
+    };
   }
 
   /**
    * Returns raw historical observations.
-   * Filterable by symbol and date range.
+   * Filterable by symbol, date range, as-of date (preventing look-ahead bias), and data mode.
    */
   public getHistoricalData(filter?: {
     symbol?: ContractSymbol;
     startDate?: string;
     endDate?: string;
+    asOfDate?: string;
+    dataMode?: DataMode;
   }): MarketObservation[] {
     let result = [...this.localObservations];
 
@@ -201,6 +239,14 @@ class MarketDataService {
     }
     if (filter?.endDate) {
       result = result.filter(o => o.date <= filter.endDate!);
+    }
+    if (filter?.asOfDate) {
+      result = result.filter(o => o.date <= filter.asOfDate!);
+    }
+    if (filter?.dataMode === 'PROTOTYPE_ONLY') {
+      result = result.filter(o => o.provenance === 'PROTOTYPE SIMULATION' || (!o.provenance && o.date <= '2026-10-08'));
+    } else if (filter?.dataMode === 'IMPORTED_ONLY') {
+      result = result.filter(o => o.provenance !== 'PROTOTYPE SIMULATION' && o.provenance !== undefined);
     }
 
     return result.sort((a, b) => a.date.localeCompare(b.date));
@@ -227,16 +273,21 @@ class MarketDataService {
     symbol?: ContractSymbol;
     startDate?: string;
     endDate?: string;
+    asOfDate?: string;
+    dataMode?: DataMode;
   }): NormalizedObservation[] {
     const raw = this.getHistoricalData(filter);
     return raw.map(obs => normalizeObservation(obs));
   }
 
   /**
-   * Returns latest available observation per contract symbol
+   * Returns latest available observation per contract symbol as-of a specific date
    */
-  public getLatestObservations(): Record<ContractSymbol, NormalizedObservation> {
-    const dates = this.getAvailableDates();
+  public getLatestObservations(asOfDate?: string): Record<ContractSymbol, NormalizedObservation> {
+    let dates = this.getAvailableDates();
+    if (asOfDate) {
+      dates = dates.filter(d => d <= asOfDate);
+    }
     if (dates.length === 0) {
       return {} as Record<ContractSymbol, NormalizedObservation>;
     }
@@ -250,11 +301,13 @@ class MarketDataService {
       }
     }
 
-    // Fallback: If any symbol is missing on latest date, pick its most recent observation
+    // Fallback: If any symbol is missing on latest date, pick its most recent observation as-of that date
     const allSymbols: ContractSymbol[] = ['GOLDM', 'GOLDTEN', 'GOLDGUINEA', 'GOLDPETAL'];
     for (const sym of allSymbols) {
       if (!result[sym]) {
-        const symObs = this.localObservations.filter(o => o.symbol === sym);
+        const symObs = this.localObservations
+          .filter(o => o.symbol === sym && (!asOfDate || o.date <= asOfDate))
+          .sort((a, b) => a.date.localeCompare(b.date));
         if (symObs.length > 0) {
           result[sym] = normalizeObservation(symObs[symObs.length - 1]);
         }
@@ -320,12 +373,18 @@ class MarketDataService {
     const dates = this.getAvailableDates();
     const lastDate = dates[dates.length - 1] || 'N/A';
     const report = validateMarketData(this.localObservations);
+    const breakdown = this.getProvenanceBreakdown();
+    const isHybrid = breakdown.prototypeSimulationCount > 0 && breakdown.userImportedCount > 0;
+    const currentProvenance = isHybrid ? 'HYBRID / MIXED PROVENANCE' : this.provenance;
 
     const availableContracts = new Set(this.localObservations.map(o => o.symbol));
 
     return {
-      source: this.metadata.sourceClassification,
+      source: isHybrid
+        ? `Hybrid Dataset (${breakdown.prototypeSimulationCount} Prototype Sim + ${breakdown.userImportedCount} User-Imported)`
+        : this.metadata.sourceClassification,
       provenance: this.provenance,
+      provenanceBreakdown: breakdown,
       totalRecords: this.localObservations.length,
       validRecords: report.validRecords,
       rejectedRecords: this.metadata.rejectedRows,
@@ -626,8 +685,9 @@ class MarketDataService {
 
       this.localObservations = mergedRecords;
 
-      // Update provenance: once user data has been merged in,
-      // it is no longer purely prototype simulation
+      // Update provenance breakdown
+      const breakdown = this.getProvenanceBreakdown();
+      const isHybrid = breakdown.prototypeSimulationCount > 0 && breakdown.userImportedCount > 0;
       if (this.provenance === 'PROTOTYPE SIMULATION' || this.provenance === 'PROTOTYPE SAMPLE — UNVERIFIED SOURCING') {
         this.provenance = 'USER-IMPORTED DATA — SOURCE UNVERIFIED';
       }
@@ -635,9 +695,12 @@ class MarketDataService {
       this.metadata = {
         ...this.metadata,
         provenance: this.provenance,
+        provenanceBreakdown: breakdown,
         filename: updatedFiles.map(f => f.filename).join(', '),
         fileHashSha256: fileHash,
-        sourceClassification: this.provenance === 'USER-ATTESTED SOURCE — NOT INDEPENDENTLY VERIFIED'
+        sourceClassification: isHybrid
+          ? `Hybrid Dataset (${breakdown.prototypeSimulationCount} Prototype Simulation + ${breakdown.userImportedCount} User-Imported)`
+          : this.provenance === 'USER-ATTESTED SOURCE — NOT INDEPENDENTLY VERIFIED'
           ? 'User-Attested Bhavcopy CSV File (Not Independently Verified)'
           : 'User-Imported MCX Bhavcopy Dataset',
         validRows: mergedRecords.length,

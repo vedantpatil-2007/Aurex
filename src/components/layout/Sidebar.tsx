@@ -184,6 +184,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <Users className="w-3.5 h-3.5 text-amber-500 shrink-0" />
             <span>Vedant Patil <span className="text-[10px] text-slate-400">(Quant Systems)</span></span>
           </div>
+          <div className="flex items-center gap-1.5 text-slate-300 pl-5">
+            <span>Vedshree Mhatre</span>
+          </div>
+          <div className="flex items-center gap-1.5 text-slate-300 pl-5">
+            <span>Dhanashree Vaze</span>
+          </div>
         </div>
 
         <div className="pt-2 border-t border-slate-800/60 flex items-center justify-between text-[10px] text-slate-400 font-mono">

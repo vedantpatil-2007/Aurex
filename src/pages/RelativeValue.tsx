@@ -187,7 +187,7 @@ export const RelativeValue: React.FC<RelativeValuePageProps> = ({
         <div className="bg-white border border-slate-200 rounded-lg p-3">
           <div className="text-[10px] font-mono uppercase text-slate-400">Mean Spread (μ)</div>
           <div className="text-base font-bold font-mono text-slate-700 mt-1">{formatINR(meanSpread)}</div>
-          <div className="text-[10px] text-slate-400">{rollingWindow}D Rolling Mean</div>
+          <div className="text-[10px] text-slate-400">Historical Baseline Mean</div>
         </div>
 
         <div className="bg-white border border-slate-200 rounded-lg p-3">
@@ -199,10 +199,24 @@ export const RelativeValue: React.FC<RelativeValuePageProps> = ({
         <div className="bg-white border border-slate-200 rounded-lg p-3">
           <div className="text-[10px] font-mono uppercase text-slate-400">Z-Score</div>
           <div className="text-base font-bold font-mono text-slate-900 mt-1">
-            {currentZScore > 0 ? '+' : ''}{currentZScore.toFixed(2)} σ
+            {zScoreAnalysis.isCalculable !== false ? (
+              `${currentZScore > 0 ? '+' : ''}${currentZScore.toFixed(2)} σ`
+            ) : (
+              <span className="text-xs text-amber-600 font-bold">N/A</span>
+            )}
           </div>
-          <div className={`text-[10px] font-bold ${Math.abs(currentZScore) >= 1.5 ? 'text-amber-600' : 'text-slate-400'}`}>
-            {Math.abs(currentZScore) >= 1.5 ? 'RELATIVE-VALUE ANOMALY' : 'Normal Range'}
+          <div className={`text-[10px] font-bold ${
+            zScoreAnalysis.isCalculable === false
+              ? 'text-amber-600'
+              : Math.abs(currentZScore) >= 1.5
+              ? 'text-amber-600'
+              : 'text-slate-400'
+          }`}>
+            {zScoreAnalysis.isCalculable === false
+              ? (zScoreAnalysis.incalculableReason || 'Insufficient History')
+              : Math.abs(currentZScore) >= 1.5
+              ? 'RELATIVE-VALUE ANOMALY'
+              : 'Normal Range'}
           </div>
         </div>
       </div>

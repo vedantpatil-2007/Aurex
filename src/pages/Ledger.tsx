@@ -394,7 +394,7 @@ export const Ledger: React.FC<LedgerPageProps> = ({
                           </span>
                         </td>
                         <td className="py-2 px-3 text-slate-600">
-                          {t.entryDate} â†’ {t.exitDate || 'OPEN'}
+                          {t.entryDate} → {t.exitDate || 'OPEN'}
                         </td>
                         <td className="py-2 px-3 text-right text-slate-700">{t.holdingDays}d</td>
                         <td className="py-2 px-3 text-right text-slate-500">

@@ -1,7 +1,9 @@
 import React, { useMemo } from 'react';
-import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
+import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ReferenceLine } from 'recharts';
 import { NormalizedObservation, ContractSymbol } from '../../types/market';
+import { selectActiveObservation } from '../../engines/relativeValueEngine';
 import { formatINR } from '../../utils/formatters';
+import { Info } from 'lucide-react';
 
 interface NormalizedComparisonChartProps {
   observations: NormalizedObservation[];
@@ -12,22 +14,52 @@ export const NormalizedComparisonChart: React.FC<NormalizedComparisonChartProps>
   observations,
   selectedSymbol
 }) => {
-  // Transform observations into aligned time series: { date, GOLDM, GOLDTEN, GOLDGUINEA, GOLDPETAL }
+  // Transform observations into aligned time series with active near-month contract selection
   const chartData = useMemo(() => {
-    const dateMap = new Map<string, any>();
+    const dateSymbolMap = new Map<string, Map<ContractSymbol, NormalizedObservation[]>>();
 
     for (const obs of observations) {
-      if (!dateMap.has(obs.date)) {
-        dateMap.set(obs.date, { date: obs.date });
+      if (!dateSymbolMap.has(obs.date)) {
+        dateSymbolMap.set(obs.date, new Map());
       }
-      const entry = dateMap.get(obs.date);
-      entry[obs.symbol] = obs.normalizedPrice;
+      const symMap = dateSymbolMap.get(obs.date)!;
+      const list = symMap.get(obs.symbol) || [];
+      list.push(obs);
+      symMap.set(obs.symbol, list);
     }
 
-    const arr = Array.from(dateMap.values());
+    const arr: any[] = [];
+    for (const [date, symMap] of dateSymbolMap.entries()) {
+      const entry: any = { date, _provenance: 'PROTOTYPE SIMULATION', _expiries: {} };
+      for (const [sym, obsList] of symMap.entries()) {
+        const activeObs = selectActiveObservation(obsList);
+        if (activeObs) {
+          entry[sym] = activeObs.normalizedPrice;
+          entry._expiries[sym] = activeObs.expiryDate;
+          if (activeObs.provenance) {
+            entry._provenance = activeObs.provenance;
+          }
+        }
+      }
+      arr.push(entry);
+    }
+
     arr.sort((a, b) => a.date.localeCompare(b.date));
     return arr;
   }, [observations]);
+
+  // Detect data-source boundary between prototype simulation and user-imported observations
+  const boundaryDate = useMemo(() => {
+    let lastSimDate = '';
+    for (const d of chartData) {
+      if (d._provenance === 'PROTOTYPE SIMULATION' || d.date <= '2026-10-08') {
+        lastSimDate = d.date;
+      } else if (lastSimDate && (d._provenance !== 'PROTOTYPE SIMULATION' || d.date > '2026-10-08')) {
+        return d.date;
+      }
+    }
+    return null;
+  }, [chartData]);
 
   // Color mappings
   const contractColors: Record<ContractSymbol, string> = {
@@ -125,6 +157,19 @@ export const NormalizedComparisonChart: React.FC<NormalizedComparisonChartProps>
                 );
               }}
             />
+            {boundaryDate && (
+              <ReferenceLine
+                x={boundaryDate}
+                stroke="#d97706"
+                strokeDasharray="4 4"
+                label={{
+                  value: 'Data-Source Boundary (Sim → Imported)',
+                  fill: '#b45309',
+                  fontSize: 10,
+                  position: 'insideTopLeft'
+                }}
+              />
+            )}
             {(['GOLDM', 'GOLDTEN', 'GOLDGUINEA', 'GOLDPETAL'] as ContractSymbol[]).map(sym => {
               const isSelected = selectedSymbol === sym;
               return (
@@ -143,6 +188,15 @@ export const NormalizedComparisonChart: React.FC<NormalizedComparisonChartProps>
           </LineChart>
         </ResponsiveContainer>
       </div>
+
+      {boundaryDate && (
+        <div className="mt-3 p-3 rounded-lg bg-amber-50/80 border border-amber-200 text-xs text-amber-950 flex items-start gap-2">
+          <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+          <div className="leading-relaxed">
+            <span className="font-semibold text-amber-900 font-mono">Data-source boundary:</span> Prototype simulation observations transition to user-imported observations dated {boundaryDate}. The imported source has not been independently verified, and price continuity between the datasets has not been established. Active near-month expiries are selected for consistent cross-contract comparison.
+          </div>
+        </div>
+      )}
     </div>
   );
 };
