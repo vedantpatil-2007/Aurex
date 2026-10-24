@@ -13,30 +13,44 @@ export function generateWalkForwardWindows(
   spreadSeries: RelativeValueSpreadPoint[],
   friction: FrictionAssumptions
 ): ValidationWindowResult[] {
-  if (!spreadSeries || spreadSeries.length < 15) {
+  // Gate 0 requirement: at least 15 sessions dedicated to in-sample calibration
+  const minTrainSize = 15;
+  // Calibrated rolling statistics requirement: at least 5 sessions for an out-of-sample test window
+  const minTestSize = 5;
+  const minTotalPoints = minTrainSize + minTestSize; // Minimum 20 sessions required for valid out-of-sample evaluation
+
+  if (!spreadSeries || spreadSeries.length < minTotalPoints) {
     return [];
   }
 
   const totalPoints = spreadSeries.length;
-  const windowCount = 4;
-  const testWindowSize = Math.floor(totalPoints / (windowCount + 2));
-  const minTrainSize = 10;
-  
+  const availableOOS = totalPoints - minTrainSize;
+  const windowCount = Math.min(4, Math.floor(availableOOS / minTestSize));
+
+  if (windowCount <= 0) {
+    return [];
+  }
+
+  const testWindowSize = Math.floor(availableOOS / windowCount);
   const totalFriction = calculateTotalFriction(friction);
   const results: ValidationWindowResult[] = [];
 
   for (let i = 0; i < windowCount; i++) {
-    const testEndIdx = totalPoints - (windowCount - 1 - i) * testWindowSize - 1;
-    const testStartIdx = Math.max(minTrainSize, testEndIdx - testWindowSize + 1);
-    const trainStartIdx = Math.max(0, testStartIdx - minTrainSize - i * 3);
+    const testStartIdx = minTrainSize + i * testWindowSize;
+    const testEndIdx = (i === windowCount - 1) ? totalPoints - 1 : testStartIdx + testWindowSize - 1;
+    const trainStartIdx = 0;
     const trainEndIdx = testStartIdx - 1;
 
-    if (trainEndIdx <= trainStartIdx || testEndIdx <= testStartIdx) {
+    if (trainEndIdx < minTrainSize - 1 || testEndIdx < testStartIdx) {
       continue;
     }
 
     const trainSlice = spreadSeries.slice(trainStartIdx, trainEndIdx + 1);
     const testSlice = spreadSeries.slice(testStartIdx, testEndIdx + 1);
+
+    if (testSlice.length < minTestSize || trainSlice.length < minTrainSize) {
+      continue;
+    }
 
     // Prevent cross-provenance contamination in walk-forward windows
     const provsInWindow = new Set([...trainSlice, ...testSlice].map(p => p.provenanceA || 'PROTOTYPE SIMULATION'));
@@ -59,7 +73,8 @@ export function generateWalkForwardWindows(
     let decisionTaken: 'ACTIONABLE' | 'WATCH' | 'NO TRADE';
     let status: 'STABLE' | 'MARGINAL' | 'REJECTED';
 
-    if (netEdge > 15) {
+    // Gate 0 Compliance: Only assign ACTIONABLE if dataset has SUFFICIENT statistical sample size (>= 30 sessions)
+    if (netEdge > 15 && totalPoints >= 30) {
       decisionTaken = 'ACTIONABLE';
       status = 'STABLE';
     } else if (netEdge > 0) {
@@ -70,9 +85,10 @@ export function generateWalkForwardWindows(
       status = 'REJECTED';
     }
 
+    const windowIndex = results.length + 1;
     results.push({
-      windowId: i + 1,
-      windowLabel: `Window ${i + 1}`,
+      windowId: windowIndex,
+      windowLabel: `Window ${windowIndex}`,
       trainStartDate: trainSlice[0]?.date || 'N/A',
       trainEndDate: trainSlice[trainSlice.length - 1]?.date || 'N/A',
       testStartDate: testSlice[0]?.date || 'N/A',

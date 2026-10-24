@@ -2,10 +2,12 @@ import React, { useMemo } from 'react';
 import {
   NormalizedObservation,
   ContractSymbol,
-  FrictionAssumptions
+  FrictionAssumptions,
+  DataProvenance
 } from '../types/market';
 import { buildPairSpreadSeries } from '../engines/relativeValueEngine';
 import { generateWalkForwardWindows } from '../engines/validationEngine';
+import { calculateTotalFriction } from '../engines/liquidityCostEngine';
 import { WalkForwardTimelineChart } from '../components/charts/WalkForwardTimelineChart';
 import { BacktestDashboard } from '../components/backtest/BacktestDashboard';
 import { MetricCard } from '../components/cards/MetricCard';
@@ -22,15 +24,18 @@ interface ValidationPageProps {
   selectedPair: [ContractSymbol, ContractSymbol];
   friction: FrictionAssumptions;
   onNavigate: (page: any) => void;
+  provenance?: DataProvenance;
 }
 
 export const Validation: React.FC<ValidationPageProps> = ({
   observations,
   selectedPair,
   friction,
-  onNavigate
+  onNavigate,
+  provenance: propProvenance
 }) => {
-  const provenance = marketDataService.getProvenance();
+  const activeMode = marketDataService.getActiveDataMode();
+  const activeProvenance = propProvenance || marketDataService.getMetadata(activeMode).provenance;
 
   // Aligned spread series
   const seriesA = useMemo(() => observations.filter(o => o.symbol === selectedPair[0]), [observations, selectedPair]);
@@ -47,8 +52,8 @@ export const Validation: React.FC<ValidationPageProps> = ({
     ? Number((windows.reduce((acc, w) => acc + w.outOfSampleObservedEdge, 0) / windows.length).toFixed(2))
     : 0;
 
-  const estimatedCost = windows.length > 0 ? windows[0].estimatedFriction : 0;
-  const avgNetEdge = Number((avgGrossEdge - estimatedCost).toFixed(2));
+  const estimatedCost = calculateTotalFriction(friction);
+  const avgNetEdge = windows.length > 0 ? Number((avgGrossEdge - estimatedCost).toFixed(2)) : 0;
 
   return (
     <div className="space-y-6">
@@ -85,17 +90,17 @@ export const Validation: React.FC<ValidationPageProps> = ({
             Walk-Forward Testing Protocol
           </h3>
           <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded font-mono ${
-            provenance === 'OFFICIAL MCX DATA — SOURCE VERIFIED'
+            activeProvenance === 'OFFICIAL MCX DATA — SOURCE VERIFIED'
               ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-              : provenance === 'USER-ATTESTED SOURCE — NOT INDEPENDENTLY VERIFIED'
+              : activeProvenance === 'USER-ATTESTED SOURCE — NOT INDEPENDENTLY VERIFIED'
               ? 'bg-teal-100 text-teal-800 border border-teal-300'
-              : provenance === 'USER-IMPORTED DATA — SOURCE UNVERIFIED'
+              : activeProvenance === 'USER-IMPORTED DATA — SOURCE UNVERIFIED'
               ? 'bg-sky-100 text-sky-800 border border-sky-300'
-              : provenance === 'PROTOTYPE SAMPLE — UNVERIFIED SOURCING'
+              : activeProvenance === 'PROTOTYPE SAMPLE — UNVERIFIED SOURCING' || activeProvenance === 'PROTOTYPE SIMULATION'
               ? 'bg-indigo-100 text-indigo-800 border border-indigo-300'
               : 'bg-amber-100 text-amber-800 border border-amber-300'
           }`}>
-            {provenance}
+            {activeProvenance}
           </span>
         </div>
 
@@ -184,8 +189,18 @@ export const Validation: React.FC<ValidationPageProps> = ({
               Rolling Window Statistical Edge Summary
             </h3>
           </div>
-          <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 font-mono">
-            Prototype Simulation
+          <span className={`text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded font-mono ${
+            activeProvenance === 'OFFICIAL MCX DATA — SOURCE VERIFIED'
+              ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+              : activeProvenance === 'USER-ATTESTED SOURCE — NOT INDEPENDENTLY VERIFIED'
+              ? 'bg-teal-100 text-teal-800 border border-teal-300'
+              : activeProvenance === 'USER-IMPORTED DATA — SOURCE UNVERIFIED'
+              ? 'bg-sky-100 text-sky-800 border border-sky-300'
+              : activeProvenance === 'PROTOTYPE SAMPLE — UNVERIFIED SOURCING' || activeProvenance === 'PROTOTYPE SIMULATION'
+              ? 'bg-indigo-100 text-indigo-800 border border-indigo-300'
+              : 'bg-amber-100 text-amber-800 border border-amber-300'
+          }`}>
+            {activeProvenance}
           </span>
         </div>
 
@@ -193,7 +208,7 @@ export const Validation: React.FC<ValidationPageProps> = ({
           <MetricCard
             label="Out-of-Sample Gross Edge"
             value={windows.length > 0 ? formatINR(avgGrossEdge) : 'N/A'}
-            subtitle={windows.length > 0 ? 'Mean gross dislocation across test windows' : 'Requires >= 15 sessions'}
+            subtitle={windows.length > 0 ? 'Mean gross dislocation across test windows' : 'Requires >= 20 sessions (15 train + 5 test)'}
             badge={
               <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-800">
                 ₹ / 10g
@@ -215,7 +230,7 @@ export const Validation: React.FC<ValidationPageProps> = ({
           <MetricCard
             label="Realized Net Edge"
             value={windows.length > 0 ? formatINR(avgNetEdge) : 'N/A'}
-            subtitle={windows.length > 0 ? 'Theoretical edge surviving friction' : 'Insufficient historical data'}
+            subtitle={windows.length > 0 ? 'Theoretical edge surviving friction' : 'Insufficient historical data for out-of-sample test'}
             badge={
               <span className={`text-[11px] font-mono font-bold px-2 py-0.5 rounded ${
                 windows.length === 0
@@ -257,8 +272,19 @@ export const Validation: React.FC<ValidationPageProps> = ({
               INSUFFICIENT HISTORICAL DATA FOR OUT-OF-SAMPLE WINDOWS
             </div>
             <p className="text-xs text-slate-600 max-w-xl mx-auto leading-relaxed">
-              The active dataset contains {spreadSeries.length} contemporaneous trading session(s). Walk-forward validation requires at least 15 sequential sessions within the same single-provenance segment to partition into In-Sample calibration and Out-of-Sample evaluation windows without look-ahead bias or cross-provenance contamination.
+              The active dataset contains {spreadSeries.length} contemporaneous trading session(s). Walk-forward out-of-sample evaluation requires at least 20 sequential sessions within the same single-provenance segment: 15 sessions dedicated to In-Sample calibration and at least 5 sessions for an Out-of-Sample test window to compute statistically valid rolling metrics without look-ahead bias or cross-provenance contamination.
             </p>
+            <div className="flex flex-wrap items-center justify-center gap-3 text-xs font-mono pt-1">
+              <div className="bg-slate-50 border border-slate-200 px-3 py-1.5 rounded">
+                In-Sample Calibration: <strong className="text-slate-900">{Math.min(spreadSeries.length, 15)} / 15 sessions</strong>
+              </div>
+              <div className="bg-slate-50 border border-slate-200 px-3 py-1.5 rounded">
+                Out-of-Sample Evaluation: <strong className="text-slate-900">{Math.max(0, spreadSeries.length - 15)} / 5 sessions (min)</strong>
+              </div>
+              <div className="bg-amber-50 border border-amber-300 px-3 py-1.5 rounded text-amber-900">
+                Status: <strong>{spreadSeries.length < 15 ? 'Calibrating In-Sample Baseline' : 'In-Sample Complete • Awaiting Out-of-Sample Data'}</strong>
+              </div>
+            </div>
             <div className="pt-2">
               <button
                 onClick={() => onNavigate('data-lab')}

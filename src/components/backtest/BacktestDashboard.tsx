@@ -66,6 +66,9 @@ export const BacktestDashboard: React.FC<BacktestDashboardProps> = ({
     return runWalkForwardBacktest(observations, params);
   }, [observations, selectedPair, entryZ, exitZ, stopLossZ, maxHolding, friction, warmUp]);
 
+  const evaluatedDates = backtestResult.evaluatedDates ?? backtestResult.dailyEquityCurve.length;
+  const warmUpDates = backtestResult.warmUpDates ?? warmUp;
+
   return (
     <div className="space-y-6">
       {/* Simulation Controls Panel */}
@@ -213,25 +216,31 @@ export const BacktestDashboard: React.FC<BacktestDashboardProps> = ({
         <div className="bg-white border border-slate-200 rounded-xl p-3.5 space-y-1 shadow-sm">
           <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Win Rate</div>
           <div className="text-lg font-bold text-slate-900">
-            {backtestResult.winRatePct}%
+            {backtestResult.completedTrades > 0 ? `${backtestResult.winRatePct}%` : 'N/A'}
           </div>
-          <div className="text-[10px] text-slate-500">{backtestResult.winCount}W / {backtestResult.lossCount}L</div>
+          <div className="text-[10px] text-slate-500">
+            {backtestResult.completedTrades > 0 ? `${backtestResult.winCount}W / ${backtestResult.lossCount}L` : 'No closed trades'}
+          </div>
         </div>
 
         <div className="bg-white border border-slate-200 rounded-xl p-3.5 space-y-1 shadow-sm">
           <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Profit Factor</div>
           <div className="text-lg font-bold text-slate-900">
-            {backtestResult.profitFactor.toFixed(2)}x
+            {backtestResult.completedTrades > 0 ? `${backtestResult.profitFactor.toFixed(2)}x` : 'N/A'}
           </div>
-          <div className="text-[10px] text-slate-500">Gross: {formatINR(backtestResult.grossPnL)}</div>
+          <div className="text-[10px] text-slate-500">
+            {backtestResult.completedTrades > 0 ? `Gross: ${formatINR(backtestResult.grossPnL)}` : 'No closed trades'}
+          </div>
         </div>
 
         <div className="bg-white border border-slate-200 rounded-xl p-3.5 space-y-1 shadow-sm">
           <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Sharpe Ratio</div>
           <div className="text-lg font-bold text-slate-900">
-            {backtestResult.sharpeRatio.toFixed(2)}
+            {backtestResult.completedTrades > 0 ? backtestResult.sharpeRatio.toFixed(2) : 'N/A'}
           </div>
-          <div className="text-[10px] text-slate-500">Annualized (252d)</div>
+          <div className="text-[10px] text-slate-500">
+            {backtestResult.completedTrades > 0 ? 'Annualized (252d)' : 'Insufficient trades'}
+          </div>
         </div>
 
         <div className="bg-white border border-slate-200 rounded-xl p-3.5 space-y-1 shadow-sm">
@@ -289,7 +298,7 @@ export const BacktestDashboard: React.FC<BacktestDashboardProps> = ({
             </p>
           </div>
           <div className="text-xs font-mono text-slate-500 bg-slate-100 px-2.5 py-1 rounded">
-            {backtestResult.dailyEquityCurve.length} Simulation Sessions
+            {backtestResult.dailyEquityCurve.length} Simulation Sessions ({Math.min(evaluatedDates, warmUpDates)} In-Sample • {Math.max(0, evaluatedDates - warmUpDates)} Out-of-Sample)
           </div>
         </div>
 
@@ -351,7 +360,9 @@ export const BacktestDashboard: React.FC<BacktestDashboardProps> = ({
 
         {backtestResult.trades.length === 0 ? (
           <div className="p-8 text-center text-xs text-slate-500">
-            No candidate signals cleared the Z-score and transaction cost hurdle gates during this simulation period.
+            {Math.max(0, evaluatedDates - warmUpDates) === 0
+              ? `No trades executed: all ${evaluatedDates} sessions utilized for in-sample warm-up calibration. Out-of-sample simulation requires >= ${warmUpDates + 1} continuous sessions.`
+              : 'No candidate signals cleared the Z-score and transaction cost hurdle gates during this simulation period.'}
           </div>
         ) : (
           <div className="overflow-x-auto">

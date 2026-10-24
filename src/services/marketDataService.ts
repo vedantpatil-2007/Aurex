@@ -209,7 +209,15 @@ class MarketDataService {
   /**
    * Returns current data provenance
    */
-  public getProvenance(): DataProvenance {
+  public getProvenance(dataMode?: DataMode): DataProvenance {
+    if (dataMode === 'PROTOTYPE_ONLY') {
+      return 'PROTOTYPE SIMULATION';
+    }
+    if (dataMode === 'IMPORTED_ONLY') {
+      return this.metadata.isUserAttested
+        ? 'USER-ATTESTED SOURCE — NOT INDEPENDENTLY VERIFIED'
+        : 'USER-IMPORTED DATA — SOURCE UNVERIFIED';
+    }
     return this.provenance;
   }
 

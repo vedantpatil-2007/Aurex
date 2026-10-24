@@ -57,6 +57,8 @@ export function runWalkForwardBacktest(
   let dataSufficiencyWarning: string | undefined = undefined;
   if (commonDates.length < warmUpDays || commonDates.length < 15) {
     dataSufficiencyWarning = `INSUFFICIENT HISTORICAL DATA (Sample size limitation): Only ${commonDates.length} contemporaneous trading session(s) available for pair ${pair.join('/')}, whereas statistical walk-forward calibration requires >= ${Math.max(15, warmUpDays)} warm-up sessions. Zero trades could be calibrated on this limited sample; meaningful statistical validation requires continuous historical coverage (target >= 60 sessions). Single-session or isolated datasets cannot support historical walk-forward strategy validation.`;
+  } else if (commonDates.length <= warmUpDays) {
+    dataSufficiencyWarning = `Preliminary sample: Evaluated ${commonDates.length} trading sessions. All ${commonDates.length} sessions were utilized for in-sample warm-up calibration (0 out-of-sample evaluation sessions available). Strategy execution requires additional forward sessions beyond the ${warmUpDays}-session warm-up window.`;
   } else if (commonDates.length < 30) {
     dataSufficiencyWarning = `Preliminary sample: Evaluated ${commonDates.length} trading sessions (${commonDates.length - warmUpDays} out-of-sample). Statistical power is limited; results represent illustrative model calibration rather than proven alpha.`;
   }

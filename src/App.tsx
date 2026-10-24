@@ -125,8 +125,8 @@ export function App() {
     return marketDataService.getLatestObservations(selectedDate, dataMode);
   }, [dataVersion, selectedDate, dataMode]);
 
-  const provenance = marketDataService.getProvenance();
-  const datasetMetadata = marketDataService.getMetadata();
+  const datasetMetadata = marketDataService.getMetadata(dataMode);
+  const provenance = datasetMetadata.provenance;
 
   // Judge Demo Mode state (11-step walkthrough)
   const [isJudgeDemoActive, setIsJudgeDemoActive] = useState(false);
@@ -395,6 +395,7 @@ export function App() {
               selectedPair={selectedPair}
               friction={friction}
               onNavigate={handleNavigate}
+              provenance={provenance}
             />
           )}
 
