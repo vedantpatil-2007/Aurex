@@ -264,6 +264,46 @@ export interface DatasetMetadata {
   verificationNotes?: string;
 }
 
+export interface DatasetBackupV1 {
+  version: '1.0';
+  app: 'AUREX';
+  exportedAt: string;
+  sourceMode?: DataMode;
+  provenance: DataProvenance;
+  metadata: DatasetMetadata;
+  observationsCount: number;
+  distinctDatesCount: number;
+  dateRange: { start: string; end: string };
+  observations: MarketObservation[];
+}
+
+export interface BackupValidationResult {
+  isValid: boolean;
+  version?: string;
+  app?: string;
+  totalRecordsInBackup: number;
+  validRecordsCount: number;
+  invalidRecordsCount: number;
+  errors: string[];
+  warnings: string[];
+  detectedTradingDates: string[];
+  dateRange: { start: string; end: string };
+  provenance: DataProvenance;
+}
+
+export interface RestoreResult {
+  success: boolean;
+  message: string;
+  totalInBackup: number;
+  newlyInsertedCount: number;
+  unchangedDuplicatesCount: number;
+  conflictsCount: number;
+  conflictingObservations: MergeConflictDetail[];
+  finalTotalStoredCount: number;
+  finalDistinctDatesCount: number;
+  finalDateRange: { start: string; end: string };
+}
+
 export interface RejectedRow {
   rowNumber: number;
   raw: Record<string, string>;

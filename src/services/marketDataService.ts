@@ -13,7 +13,10 @@ import {
   MergeConflictDetail,
   DataMode,
   ProvenanceBreakdown,
-  DataSufficiencyAssessment
+  DataSufficiencyAssessment,
+  DatasetBackupV1,
+  BackupValidationResult,
+  RestoreResult
 } from '../types/market';
 import { CONTRACT_SPECIFICATIONS, CONTRACT_LIST } from '../data/contracts';
 import { SEED_MARKET_DATA } from '../data/seedMarketData';
@@ -969,6 +972,406 @@ class MarketDataService {
    */
   public unverifyActiveDataset(): void {
     this.revokeSourceAttestation();
+  }
+
+  /**
+   * Exports the active or mode-selected historical dataset as a structured, versioned JSON backup.
+   * Includes all observations, contract symbols, dates, expiries, prices, volumes, open interest,
+   * source files, and provenance metadata.
+   */
+  public exportDatasetBackup(dataMode?: DataMode): DatasetBackupV1 {
+    const effectiveMode = dataMode ?? (
+      this.localObservations.some(o => o.provenance !== 'PROTOTYPE SIMULATION')
+        ? 'IMPORTED_ONLY'
+        : this.activeDataMode
+    );
+
+    const obsToExport = effectiveMode === 'ALL'
+      ? this.localObservations
+      : this.getHistoricalData({ dataMode: effectiveMode });
+
+    const distinctDates = Array.from(new Set(obsToExport.map(o => o.date))).sort();
+    const effectiveProvenance = this.getProvenance(effectiveMode);
+    const meta = this.getMetadata(effectiveMode);
+
+    return {
+      version: '1.0',
+      app: 'AUREX',
+      exportedAt: new Date().toISOString(),
+      sourceMode: effectiveMode,
+      provenance: effectiveProvenance,
+      metadata: {
+        ...meta,
+        sourceFiles: this.metadata.sourceFiles ? [...this.metadata.sourceFiles] : []
+      },
+      observationsCount: obsToExport.length,
+      distinctDatesCount: distinctDates.length,
+      dateRange: {
+        start: distinctDates[0] || 'N/A',
+        end: distinctDates[distinctDates.length - 1] || 'N/A'
+      },
+      observations: obsToExport.map(o => ({
+        date: o.date,
+        symbol: o.symbol,
+        expiryDate: o.expiryDate,
+        open: o.open,
+        high: o.high,
+        low: o.low,
+        close: o.close,
+        volume: o.volume,
+        openInterest: o.openInterest,
+        provenance: o.provenance || effectiveProvenance,
+        sourceFile: o.sourceFile,
+        sourceSha256: o.sourceSha256
+      }))
+    };
+  }
+
+  /**
+   * Validates a backup JSON payload without modifying the active dataset.
+   * Verifies app identity, version schema, observation completeness, contract symbols,
+   * positive prices, and non-negative volume/OI.
+   */
+  public validateBackup(backupInput: string | unknown): BackupValidationResult {
+    const errors: string[] = [];
+    const warnings: string[] = [];
+
+    let parsed: any;
+    if (typeof backupInput === 'string') {
+      try {
+        parsed = JSON.parse(backupInput);
+      } catch (e: any) {
+        return {
+          isValid: false,
+          totalRecordsInBackup: 0,
+          validRecordsCount: 0,
+          invalidRecordsCount: 0,
+          errors: [`Invalid JSON syntax: ${e.message}`],
+          warnings: [],
+          detectedTradingDates: [],
+          dateRange: { start: 'N/A', end: 'N/A' },
+          provenance: 'USER-IMPORTED DATA — SOURCE UNVERIFIED'
+        };
+      }
+    } else {
+      parsed = backupInput;
+    }
+
+    if (!parsed || typeof parsed !== 'object') {
+      return {
+        isValid: false,
+        totalRecordsInBackup: 0,
+        validRecordsCount: 0,
+        invalidRecordsCount: 0,
+        errors: ['Backup payload is empty or not a valid object.'],
+        warnings: [],
+        detectedTradingDates: [],
+        dateRange: { start: 'N/A', end: 'N/A' },
+        provenance: 'USER-IMPORTED DATA — SOURCE UNVERIFIED'
+      };
+    }
+
+    if (parsed.app !== 'AUREX') {
+      errors.push(`Invalid application signature: expected 'AUREX', received '${parsed.app || 'undefined'}'.`);
+    }
+
+    if (parsed.version !== '1.0') {
+      errors.push(`Unsupported backup schema version: expected '1.0', received '${parsed.version || 'undefined'}'.`);
+    }
+
+    if (!Array.isArray(parsed.observations)) {
+      errors.push('Backup payload missing valid "observations" array.');
+      return {
+        isValid: false,
+        version: parsed.version,
+        app: parsed.app,
+        totalRecordsInBackup: 0,
+        validRecordsCount: 0,
+        invalidRecordsCount: 0,
+        errors,
+        warnings,
+        detectedTradingDates: [],
+        dateRange: { start: 'N/A', end: 'N/A' },
+        provenance: parsed.provenance || 'USER-IMPORTED DATA — SOURCE UNVERIFIED'
+      };
+    }
+
+    const validSymbols = new Set(['GOLDM', 'GOLDTEN', 'GOLDGUINEA', 'GOLDPETAL']);
+    let validRecordsCount = 0;
+    let invalidRecordsCount = 0;
+    const detectedTradingDates = new Set<string>();
+
+    parsed.observations.forEach((obs: any, idx: number) => {
+      let recordValid = true;
+
+      if (!obs || typeof obs !== 'object') {
+        recordValid = false;
+        errors.push(`Row ${idx + 1}: Malformed observation entry.`);
+      } else {
+        if (!validSymbols.has(obs.symbol)) {
+          recordValid = false;
+          if (errors.length < 10) errors.push(`Row ${idx + 1}: Unsupported contract symbol '${obs.symbol}'.`);
+        }
+        if (!obs.date || isNaN(Date.parse(obs.date))) {
+          recordValid = false;
+          if (errors.length < 10) errors.push(`Row ${idx + 1}: Missing or invalid date '${obs.date}'.`);
+        }
+        if (!obs.expiryDate || isNaN(Date.parse(obs.expiryDate))) {
+          recordValid = false;
+          if (errors.length < 10) errors.push(`Row ${idx + 1}: Missing or invalid expiryDate '${obs.expiryDate}'.`);
+        }
+        if (typeof obs.close !== 'number' || !isFinite(obs.close) || obs.close <= 0) {
+          recordValid = false;
+          if (errors.length < 10) errors.push(`Row ${idx + 1}: Invalid close price '${obs.close}'.`);
+        }
+        if (typeof obs.volume !== 'number' || !isFinite(obs.volume) || obs.volume < 0) {
+          recordValid = false;
+          if (errors.length < 10) errors.push(`Row ${idx + 1}: Invalid volume '${obs.volume}'.`);
+        }
+        if (typeof obs.openInterest !== 'number' || !isFinite(obs.openInterest) || obs.openInterest < 0) {
+          recordValid = false;
+          if (errors.length < 10) errors.push(`Row ${idx + 1}: Invalid open interest '${obs.openInterest}'.`);
+        }
+      }
+
+      if (recordValid) {
+        validRecordsCount++;
+        detectedTradingDates.add(obs.date);
+      } else {
+        invalidRecordsCount++;
+      }
+    });
+
+    if (parsed.observations.length === 0) {
+      errors.push('Backup contains 0 observations.');
+    }
+
+    const sortedDates = Array.from(detectedTradingDates).sort();
+
+    return {
+      isValid: errors.length === 0 && validRecordsCount > 0,
+      version: parsed.version,
+      app: parsed.app,
+      totalRecordsInBackup: parsed.observations.length,
+      validRecordsCount,
+      invalidRecordsCount,
+      errors,
+      warnings,
+      detectedTradingDates: sortedDates,
+      dateRange: {
+        start: sortedDates[0] || 'N/A',
+        end: sortedDates[sortedDates.length - 1] || 'N/A'
+      },
+      provenance: parsed.provenance || 'USER-IMPORTED DATA — SOURCE UNVERIFIED'
+    };
+  }
+
+  /**
+   * Restores a dataset backup into the active workspace.
+   * - Validates format before proceeding.
+   * - Prevents duplicate insertion (skips identical records).
+   * - Protects existing data from conflicting prices on the same contract/date.
+   * - Keeps user-imported data isolated from prototype simulation data.
+   * - Never silently overwrites or deletes existing records.
+   * - Saves to localStorage and updates all listeners.
+   */
+  public restoreDatasetBackup(
+    backupInput: string | unknown,
+    options?: { forceReplace?: boolean }
+  ): RestoreResult {
+    const validation = this.validateBackup(backupInput);
+    if (!validation.isValid) {
+      throw new Error(`Dataset restore rejected: ${validation.errors.join('; ')}`);
+    }
+
+    let parsed: DatasetBackupV1;
+    if (typeof backupInput === 'string') {
+      parsed = JSON.parse(backupInput);
+    } else {
+      parsed = backupInput as DatasetBackupV1;
+    }
+
+    const forceReplace = options?.forceReplace ?? false;
+
+    // Isolate by provenance: Compare incoming records against existing imported records
+    const existingImported = this.localObservations.filter(o => o.provenance !== 'PROTOTYPE SIMULATION');
+    const existingMap = new Map<string, MarketObservation>();
+    for (const obs of existingImported) {
+      existingMap.set(`${obs.symbol}_${obs.date}_${obs.expiryDate}`, obs);
+    }
+
+    let newlyInsertedCount = 0;
+    let unchangedDuplicatesCount = 0;
+    const conflictingObservations: MergeConflictDetail[] = [];
+    const newRecordsToInsert: MarketObservation[] = [];
+
+    const targetProvenance = parsed.provenance && parsed.provenance !== 'PROTOTYPE SIMULATION'
+      ? parsed.provenance
+      : 'USER-IMPORTED DATA — SOURCE UNVERIFIED';
+
+    for (const inc of parsed.observations) {
+      const key = `${inc.symbol}_${inc.date}_${inc.expiryDate}`;
+      const ext = existingMap.get(key);
+
+      if (!ext) {
+        newlyInsertedCount++;
+        newRecordsToInsert.push({
+          date: inc.date,
+          symbol: inc.symbol,
+          expiryDate: inc.expiryDate,
+          open: inc.open ?? inc.close,
+          high: inc.high ?? inc.close,
+          low: inc.low ?? inc.close,
+          close: inc.close,
+          volume: inc.volume ?? 0,
+          openInterest: inc.openInterest ?? 0,
+          provenance: targetProvenance,
+          sourceFile: inc.sourceFile ?? (parsed.metadata?.filename || 'backup_restore.json'),
+          sourceSha256: inc.sourceSha256
+        });
+      } else {
+        const isPriceDiff = Math.abs(ext.close - inc.close) > 0.01;
+        if (!isPriceDiff) {
+          unchangedDuplicatesCount++;
+        } else {
+          conflictingObservations.push({
+            symbol: inc.symbol,
+            date: inc.date,
+            expiryDate: inc.expiryDate,
+            existingClose: ext.close,
+            incomingClose: inc.close,
+            difference: `existing: ₹${ext.close} vs incoming: ₹${inc.close} (diff: ₹${(inc.close - ext.close).toFixed(2)})`
+          });
+        }
+      }
+    }
+
+    if (conflictingObservations.length > 0 && !forceReplace) {
+      throw new Error(
+        `Restore conflict: Detected ${conflictingObservations.length} conflicting observation(s) on existing contract dates. ` +
+        `Conflicting records: [${conflictingObservations.map(c => `${c.symbol} ${c.date} (${c.difference})`).join('; ')}]. ` +
+        `Silent overwriting is prevented. Resolve conflicting dataset or enable explicit replacement.`
+      );
+    }
+
+    if (forceReplace) {
+      // Explicit replacement of imported dataset with the validated backup records
+      const protoRecords = this.localObservations.filter(o => o.provenance === 'PROTOTYPE SIMULATION');
+      const replacementRecords: MarketObservation[] = parsed.observations.map(inc => ({
+        date: inc.date,
+        symbol: inc.symbol,
+        expiryDate: inc.expiryDate,
+        open: inc.open ?? inc.close,
+        high: inc.high ?? inc.close,
+        low: inc.low ?? inc.close,
+        close: inc.close,
+        volume: inc.volume ?? 0,
+        openInterest: inc.openInterest ?? 0,
+        provenance: targetProvenance,
+        sourceFile: inc.sourceFile ?? (parsed.metadata?.filename || 'backup_restore.json'),
+        sourceSha256: inc.sourceSha256
+      })).sort((a, b) => a.date.localeCompare(b.date));
+
+      const allToStore = [...protoRecords, ...replacementRecords];
+      this.localObservations = allToStore;
+      this.provenance = targetProvenance;
+
+      const backupSourceFiles = parsed.metadata?.sourceFiles || [
+        {
+          filename: parsed.metadata?.filename || 'dataset_backup.json',
+          fileHashSha256: parsed.metadata?.fileHashSha256 || 'restored_from_backup',
+          dateRange: parsed.dateRange,
+          validRows: parsed.observationsCount,
+          importTimestamp: parsed.exportedAt || new Date().toISOString()
+        }
+      ];
+
+      this.metadata = {
+        ...this.metadata,
+        ...parsed.metadata,
+        provenance: targetProvenance,
+        validRows: replacementRecords.length,
+        totalRows: allToStore.length,
+        sourceFiles: backupSourceFiles,
+        importTimestamp: new Date().toISOString()
+      };
+    } else if (existingImported.length === 0) {
+      // Clean initialization of imported dataset from backup while preserving prototype simulation records
+      const protoRecords = this.localObservations.filter(o => o.provenance === 'PROTOTYPE SIMULATION');
+      const allToStore = [...protoRecords, ...newRecordsToInsert].sort((a, b) => a.date.localeCompare(b.date));
+      this.localObservations = allToStore;
+      this.provenance = targetProvenance;
+
+      const backupSourceFiles = parsed.metadata?.sourceFiles || [
+        {
+          filename: parsed.metadata?.filename || 'dataset_backup.json',
+          fileHashSha256: parsed.metadata?.fileHashSha256 || 'restored_from_backup',
+          dateRange: parsed.dateRange,
+          validRows: parsed.observationsCount,
+          importTimestamp: parsed.exportedAt || new Date().toISOString()
+        }
+      ];
+
+      this.metadata = {
+        ...this.metadata,
+        ...parsed.metadata,
+        provenance: targetProvenance,
+        validRows: newRecordsToInsert.length,
+        totalRows: allToStore.length,
+        sourceFiles: backupSourceFiles,
+        importTimestamp: new Date().toISOString()
+      };
+    } else {
+      // Safely accumulate genuinely new observations without touching or deleting existing records
+      const mergedRecords = [...this.localObservations, ...newRecordsToInsert].sort((a, b) =>
+        a.date.localeCompare(b.date)
+      );
+      this.localObservations = mergedRecords;
+      this.provenance = targetProvenance;
+
+      // Merge source files metadata
+      const existingFiles = this.metadata.sourceFiles || [];
+      const incomingFiles = parsed.metadata?.sourceFiles || [];
+      const existingHashes = new Set(existingFiles.map(f => f.fileHashSha256));
+      const newFiles = incomingFiles.filter(f => !existingHashes.has(f.fileHashSha256));
+      const updatedFiles = [...existingFiles, ...newFiles];
+
+      const allImported = mergedRecords.filter(o => o.provenance !== 'PROTOTYPE SIMULATION');
+      const allDates = Array.from(new Set(allImported.map(o => o.date))).sort();
+
+      this.metadata = {
+        ...this.metadata,
+        validRows: allImported.length,
+        totalRows: mergedRecords.length,
+        duplicateCount: (this.metadata.duplicateCount || 0) + unchangedDuplicatesCount,
+        dateRange: { start: allDates[0] || 'N/A', end: allDates[allDates.length - 1] || 'N/A' },
+        contractCoverage: this.recalculateCoverage(allImported),
+        sourceFiles: updatedFiles,
+        importTimestamp: new Date().toISOString()
+      };
+    }
+
+    this.saveToLocalStorage();
+    this.emitChange();
+
+    const finalImported = this.localObservations.filter(o => o.provenance !== 'PROTOTYPE SIMULATION');
+    const finalDates = Array.from(new Set(finalImported.map(o => o.date))).sort();
+
+    return {
+      success: true,
+      message: `Restored ${newlyInsertedCount} new observation(s) successfully (${unchangedDuplicatesCount} unchanged duplicate(s) skipped).`,
+      totalInBackup: parsed.observations.length,
+      newlyInsertedCount,
+      unchangedDuplicatesCount,
+      conflictsCount: conflictingObservations.length,
+      conflictingObservations,
+      finalTotalStoredCount: finalImported.length,
+      finalDistinctDatesCount: finalDates.length,
+      finalDateRange: {
+        start: finalDates[0] || 'N/A',
+        end: finalDates[finalDates.length - 1] || 'N/A'
+      }
+    };
   }
 
   /**
