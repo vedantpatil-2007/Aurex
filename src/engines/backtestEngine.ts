@@ -5,11 +5,13 @@ import {
   BacktestTrade,
   BacktestEquityPoint,
   PositionDirection,
-  TradeExitReason
+  TradeExitReason,
+  FrictionAssumptions
 } from '../types/market';
 import { CONTRACT_SPECIFICATIONS } from '../data/contracts';
 import { calculateTotalFriction } from './liquidityCostEngine';
 import { evaluatePairLifecycleEligibility } from './lifecycleEngine';
+import { selectActiveObservation } from './relativeValueEngine';
 
 /**
  * Complete Walk-Forward Chronological Backtesting Engine
@@ -41,17 +43,26 @@ export function runWalkForwardBacktest(
   const specA = CONTRACT_SPECIFICATIONS[symA];
   const specB = CONTRACT_SPECIFICATIONS[symB];
 
-  // Align dates where both contracts have contemporaneous observations
-  const obsByDateA = new Map<string, NormalizedObservation>();
-  const obsByDateB = new Map<string, NormalizedObservation>();
+  // Group observations by date and symbol to select active liquid contracts deterministically
+  const obsAByDate = new Map<string, NormalizedObservation[]>();
+  const obsBByDate = new Map<string, NormalizedObservation[]>();
+  const obsByContractDate = new Map<string, NormalizedObservation>();
 
   for (const obs of observations) {
-    if (obs.symbol === symA) obsByDateA.set(obs.date, obs);
-    if (obs.symbol === symB) obsByDateB.set(obs.date, obs);
+    obsByContractDate.set(`${obs.symbol}_${obs.date}_${obs.expiryDate}`, obs);
+    if (obs.symbol === symA) {
+      const list = obsAByDate.get(obs.date) || [];
+      list.push(obs);
+      obsAByDate.set(obs.date, list);
+    } else if (obs.symbol === symB) {
+      const list = obsBByDate.get(obs.date) || [];
+      list.push(obs);
+      obsBByDate.set(obs.date, list);
+    }
   }
 
-  const commonDates = Array.from(obsByDateA.keys())
-    .filter(d => obsByDateB.has(d))
+  const commonDates = Array.from(obsAByDate.keys())
+    .filter(d => obsBByDate.has(d))
     .sort((a, b) => a.localeCompare(b));
 
   let dataSufficiencyWarning: string | undefined = undefined;
@@ -64,7 +75,15 @@ export function runWalkForwardBacktest(
   }
 
   // Friction per 10g unit
-  const frictionPer10g = calculateTotalFriction(friction);
+  const defaultFriction: FrictionAssumptions = {
+    slippagePer10g: 4.0,
+    brokerageTaxesPer10g: 3.5,
+    liquidityHaircutPer10g: 1.5,
+    costBufferPer10g: 1.0,
+    liquidityThresholdScore: 50
+  };
+  const activeFriction = friction ?? defaultFriction;
+  const frictionPer10g = calculateTotalFriction(activeFriction);
 
   // Standardized exposure basis: 100g physical gold on each leg
   const normalizedGrams = 100;
@@ -109,8 +128,18 @@ export function runWalkForwardBacktest(
   }[] = [];
 
   for (const date of commonDates) {
-    const a = obsByDateA.get(date)!;
-    const b = obsByDateB.get(date)!;
+    const listA = obsAByDate.get(date)!;
+    const listB = obsBByDate.get(date)!;
+
+    // Single-provenance matching consistent with relativeValueEngine:
+    const aImported = listA.filter(o => o.provenance !== 'PROTOTYPE SIMULATION');
+    const bImported = listB.filter(o => o.provenance !== 'PROTOTYPE SIMULATION');
+    const useImported = aImported.length > 0 && bImported.length > 0;
+
+    const a = selectActiveObservation(useImported ? aImported : listA);
+    const b = selectActiveObservation(useImported ? bImported : listB);
+    if (!a || !b) continue;
+
     const spread = Number((a.normalizedPrice - b.normalizedPrice).toFixed(2));
     spreadSeries.push({
       date,
@@ -124,14 +153,30 @@ export function runWalkForwardBacktest(
     });
   }
 
+  // Track last known prices per exact contract expiry for rollover price protection
+  const lastKnownPriceByContract = new Map<string, number>();
+
   // Iterate strictly forward through time
   for (let t = 0; t < spreadSeries.length; t++) {
     const current = spreadSeries[t];
     const prevEquity = currentEquity;
 
+    // Update last known prices for observed contracts
+    const curAObs = obsAByDate.get(current.date);
+    if (curAObs) {
+      for (const o of curAObs) lastKnownPriceByContract.set(`${symA}_${o.expiryDate}`, o.normalizedPrice);
+    }
+    const curBObs = obsBByDate.get(current.date);
+    if (curBObs) {
+      for (const o of curBObs) lastKnownPriceByContract.set(`${symB}_${o.expiryDate}`, o.normalizedPrice);
+    }
+
     // 1. Manage existing open trade (marking to market and exit evaluation)
     if (openTrade) {
       openTrade.holdingDays++;
+
+      const heldExpA: string = openTrade.expiryA || current.expA;
+      const heldExpB: string = openTrade.expiryB || current.expB;
 
       // Check current spread and prices
       const currentSpread = current.spread;
@@ -150,13 +195,19 @@ export function runWalkForwardBacktest(
         exitReason = 'END_OF_SIMULATION';
       }
 
-      // Check Lifecycle Eligibility (tender window forced exit)
+      // Check Lifecycle Eligibility (tender window forced exit on held contracts)
       if (!shouldExit) {
-        const lifecycleCheck = evaluatePairLifecycleEligibility(pair, current.date, current.expA, current.expB);
+        const lifecycleCheck = evaluatePairLifecycleEligibility(pair, current.date, heldExpA, heldExpB);
         if (!lifecycleCheck.isEligible) {
           shouldExit = true;
           exitReason = 'TENDER_WINDOW_FORCED_EXIT';
         }
+      }
+
+      // Check Contract Rollover: If benchmark active contract rolled away from held contracts
+      if (!shouldExit && (current.expA !== heldExpA || current.expB !== heldExpB)) {
+        shouldExit = true;
+        exitReason = 'CONTRACT_ROLLOVER';
       }
 
       // Check Max Holding Period
@@ -206,16 +257,24 @@ export function runWalkForwardBacktest(
       }
 
       if (shouldExit) {
+        // Retrieve exact settlement price for the held contracts on exit date to guarantee pricing integrity
+        const heldObsA = obsByContractDate.get(`${symA}_${current.date}_${heldExpA}`);
+        const heldObsB = obsByContractDate.get(`${symB}_${current.date}_${heldExpB}`);
+
+        const exitPriceA = heldObsA ? heldObsA.normalizedPrice : (current.expA === heldExpA ? current.priceA : (lastKnownPriceByContract.get(`${symA}_${heldExpA}`) ?? openTrade.entryPriceA));
+        const exitPriceB = heldObsB ? heldObsB.normalizedPrice : (current.expB === heldExpB ? current.priceB : (lastKnownPriceByContract.get(`${symB}_${heldExpB}`) ?? openTrade.entryPriceB));
+        const exitSpread = Number((exitPriceA - exitPriceB).toFixed(2));
+
         openTrade.exitDate = current.date;
-        openTrade.exitPriceA = current.priceA;
-        openTrade.exitPriceB = current.priceB;
-        openTrade.exitSpread = currentSpread;
+        openTrade.exitPriceA = exitPriceA;
+        openTrade.exitPriceB = exitPriceB;
+        openTrade.exitSpread = exitSpread;
         openTrade.status = 'CLOSED';
         openTrade.exitReason = exitReason;
 
-        // Leg-level price changes
-        const priceChangeA = current.priceA - openTrade.entryPriceA;
-        const priceChangeB = current.priceB - openTrade.entryPriceB;
+        // Leg-level price changes strictly using the same contract's entry and exit prices
+        const priceChangeA = exitPriceA - openTrade.entryPriceA;
+        const priceChangeB = exitPriceB - openTrade.entryPriceB;
 
         // Long spread: Buy Leg A, Sell Leg B
         // Short spread: Sell Leg A, Buy Leg B
@@ -313,6 +372,8 @@ export function runWalkForwardBacktest(
               entryDate: current.date,
               entryPriceA: current.priceA,
               entryPriceB: current.priceB,
+              expiryA: current.expA,
+              expiryB: current.expB,
               entrySpread: current.spread,
               lotQuantityA,
               lotQuantityB,

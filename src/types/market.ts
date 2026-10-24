@@ -85,6 +85,8 @@ export interface RelativeValueSpreadPoint {
   symbolB: ContractSymbol;
   priceA: number;
   priceB: number;
+  expiryA?: string;
+  expiryB?: string;
   spread: number;            // priceA - priceB (in ₹ / 10g)
   spreadPercentage: number;
   zScore?: number;
@@ -420,6 +422,7 @@ export type TradeExitReason =
   | 'STOP_LOSS'
   | 'MAX_HOLDING_PERIOD'
   | 'TENDER_WINDOW_FORCED_EXIT'
+  | 'CONTRACT_ROLLOVER'
   | 'END_OF_SIMULATION';
 
 export interface TradeAttribution {
@@ -435,6 +438,8 @@ export interface BacktestTrade {
   direction: PositionDirection;
   entryDate: string;
   exitDate?: string;
+  expiryA?: string;
+  expiryB?: string;
   entryPriceA: number;
   entryPriceB: number;
   exitPriceA?: number;
@@ -462,10 +467,10 @@ export interface BacktestParameters {
   zScoreEntryThreshold: number;   // e.g. 1.5
   zScoreExitThreshold: number;    // e.g. 0.0 (mean reversion)
   zScoreStopLoss?: number;        // e.g. 3.0
-  maxHoldingDays: number;         // e.g. 15
-  friction: FrictionAssumptions;
-  warmUpDays: number;             // e.g. 20
-  capitalAllocationINR: number;   // e.g. 1,000,000
+  maxHoldingDays?: number;        // e.g. 15
+  friction?: FrictionAssumptions;
+  warmUpDays?: number;            // e.g. 20
+  capitalAllocationINR?: number;  // e.g. 1,000,000
 }
 
 export interface BacktestEquityPoint {

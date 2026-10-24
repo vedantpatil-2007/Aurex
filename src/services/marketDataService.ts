@@ -301,6 +301,8 @@ class MarketDataService {
       ...this.metadata,
       totalRows: totalStored,
       validRows: modeObs.length,
+      duplicateCount: mode === 'PROTOTYPE_ONLY' ? 0 : (this.metadata.duplicateCount ?? 0),
+      rejectedRows: mode === 'PROTOTYPE_ONLY' ? 0 : (this.metadata.rejectedRows ?? 0),
       dateRange,
       contractCoverage,
       sourceFiles,

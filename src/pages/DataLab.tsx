@@ -555,7 +555,7 @@ export const DataLab: React.FC<DataLabProps> = ({
                 Discrete Contract Coverage Matrix ({effectiveMode})
               </h3>
               <span className="text-[11px] font-mono text-slate-500">
-                Mode Valid: {activeMetadata.validRows} | Total Stored: {totalStoredRecords} | Dates in Mode: {modeDistinctDates.length} | Source Files in Mode: {activeMetadata.sourceFiles ? activeMetadata.sourceFiles.length : (effectiveMode === 'IMPORTED_ONLY' ? (importedStoredCount > 0 ? 1 : 0) : 1)} | Duplicates: {activeMetadata.duplicateCount}
+                Mode Valid: {activeMetadata.validRows} | Total Stored: {totalStoredRecords} | Dates in Mode: {modeDistinctDates.length} | Source Files in Mode: {activeMetadata.sourceFiles ? activeMetadata.sourceFiles.length : (effectiveMode === 'IMPORTED_ONLY' ? (importedStoredCount > 0 ? 1 : 0) : 1)} | Duplicates Skipped on Import: {activeMetadata.duplicateCount}
               </span>
             </div>
 

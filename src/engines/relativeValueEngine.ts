@@ -147,6 +147,8 @@ export function buildPairSpreadSeries(
       symbolB,
       priceA: obsA.normalizedPrice,
       priceB: obsB.normalizedPrice,
+      expiryA: obsA.expiryDate,
+      expiryB: obsB.expiryDate,
       spread,
       spreadPercentage,
       provenanceA: provA,

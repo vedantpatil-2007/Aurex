@@ -9,7 +9,8 @@ import { FrictionAssumptions, LiquidityGrade, CostWaterfallBreakdown } from '../
  * 3. Liquidity haircut / market impact penalty (₹ / 10g)
  * 4. Safety buffer / execution margin of error (₹ / 10g)
  */
-export function calculateTotalFriction(assumptions: FrictionAssumptions): number {
+export function calculateTotalFriction(assumptions?: Partial<FrictionAssumptions>): number {
+  if (!assumptions) return 10.0;
   const slippage = Math.max(0, assumptions.slippagePer10g || 0);
   const brokerage = Math.max(0, assumptions.brokerageTaxesPer10g || 0);
   const haircut = Math.max(0, assumptions.liquidityHaircutPer10g || 0);
