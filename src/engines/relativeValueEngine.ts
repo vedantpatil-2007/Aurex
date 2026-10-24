@@ -47,7 +47,8 @@ export function getActiveObservation(
   if (date) {
     const onDate = symbolObs.filter(o => o.date === date);
     if (onDate.length > 0) {
-      return selectActiveObservation(onDate);
+      const imported = onDate.filter(o => o.provenance !== 'PROTOTYPE SIMULATION');
+      return selectActiveObservation(imported.length > 0 ? imported : onDate);
     }
     const priorDates = Array.from(new Set(symbolObs.map(o => o.date)))
       .filter(d => d <= date)
@@ -55,7 +56,8 @@ export function getActiveObservation(
     if (priorDates.length > 0) {
       const latestPriorDate = priorDates[priorDates.length - 1];
       const onPriorDate = symbolObs.filter(o => o.date === latestPriorDate);
-      return selectActiveObservation(onPriorDate);
+      const importedPrior = onPriorDate.filter(o => o.provenance !== 'PROTOTYPE SIMULATION');
+      return selectActiveObservation(importedPrior.length > 0 ? importedPrior : onPriorDate);
     }
     return undefined;
   }
@@ -63,7 +65,8 @@ export function getActiveObservation(
   const dates = Array.from(new Set(symbolObs.map(o => o.date))).sort((a, b) => a.localeCompare(b));
   const latestDate = dates[dates.length - 1];
   const onLatestDate = symbolObs.filter(o => o.date === latestDate);
-  return selectActiveObservation(onLatestDate);
+  const importedLatest = onLatestDate.filter(o => o.provenance !== 'PROTOTYPE SIMULATION');
+  return selectActiveObservation(importedLatest.length > 0 ? importedLatest : onLatestDate);
 }
 
 /**
@@ -116,8 +119,19 @@ export function buildPairSpreadSeries(
   const spreadPoints: RelativeValueSpreadPoint[] = [];
 
   for (const date of commonDates) {
-    const obsA = selectActiveObservation(aDateGroups.get(date)!);
-    const obsB = selectActiveObservation(bDateGroups.get(date)!);
+    const aList = aDateGroups.get(date)!;
+    const bList = bDateGroups.get(date)!;
+
+    // Strict single-provenance matching per trading date:
+    // If both series have user-imported observations on this date, pair them using imported data.
+    // Otherwise, pair them using prototype simulation data.
+    // Never cross provenance boundaries within the same date.
+    const aImported = aList.filter(o => o.provenance !== 'PROTOTYPE SIMULATION');
+    const bImported = bList.filter(o => o.provenance !== 'PROTOTYPE SIMULATION');
+
+    const useImported = aImported.length > 0 && bImported.length > 0;
+    const obsA = selectActiveObservation(useImported ? aImported : aList);
+    const obsB = selectActiveObservation(useImported ? bImported : bList);
     if (!obsA || !obsB) continue;
 
     const spread = calculateSpread(obsA.normalizedPrice, obsB.normalizedPrice);

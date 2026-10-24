@@ -420,6 +420,12 @@ class MarketDataService {
     const mode = dataMode ?? this.activeDataMode;
     const modeObs = this.getHistoricalData({ dataMode: mode });
     const matches = modeObs.filter(o => o.date === date);
+    if (mode === 'ALL') {
+      const importedMatches = matches.filter(o => o.provenance !== 'PROTOTYPE SIMULATION');
+      if (importedMatches.length > 0) {
+        return importedMatches.map(obs => normalizeObservation(obs));
+      }
+    }
     return matches.map(obs => normalizeObservation(obs));
   }
 
@@ -602,9 +608,14 @@ class MarketDataService {
       return { parseResult, mergeAnalysis };
     }
 
-    // Comparing against active imported dataset
+    // Isolate merge conflict and duplicate detection by provenance.
+    // User-imported market data must only be compared against existing records of the same provenance family (imported vs imported).
+    // Prototype simulation records belong to an isolated synthetic provenance and must not block or conflict with real user imports.
+    const existingImportedRecords = this.localObservations.filter(
+      obs => obs.provenance !== 'PROTOTYPE SIMULATION'
+    );
     const existingMap = new Map<string, MarketObservation>();
-    for (const obs of this.localObservations) {
+    for (const obs of existingImportedRecords) {
       existingMap.set(`${obs.symbol}_${obs.date}_${obs.expiryDate}`, obs);
     }
 
@@ -750,9 +761,10 @@ class MarketDataService {
     forceReplace: boolean
   ): void {
     if (forceReplace || !mergeAnalysis.isAccumulating) {
-      // Initialize or replace imported historical dataset
+      // Replace imported historical dataset while preserving prototype simulation records
+      const protoRecords = this.localObservations.filter(o => o.provenance === 'PROTOTYPE SIMULATION');
       const validRecords = [...parseResult.validRecords].sort((a, b) => a.date.localeCompare(b.date));
-      this.localObservations = validRecords;
+      this.localObservations = [...protoRecords, ...validRecords];
       this.provenance = 'USER-IMPORTED DATA — SOURCE UNVERIFIED';
 
       const sourceFileEntry: ImportedSourceFileMetadata = {
@@ -772,10 +784,16 @@ class MarketDataService {
         isVerified: false
       };
     } else {
-      // Accumulate genuinely new observations into existing active dataset
-      const existingKeys = new Set(this.localObservations.map(o => `${o.symbol}_${o.date}_${o.expiryDate}`));
+      // Accumulate genuinely new observations into existing active dataset.
+      // Deduplicate strictly against existing records of the same provenance family (imported vs imported).
+      // Never allow prototype simulation records to filter out genuine user-imported observations.
+      const existingImportedKeys = new Set(
+        this.localObservations
+          .filter(o => o.provenance !== 'PROTOTYPE SIMULATION')
+          .map(o => `${o.symbol}_${o.date}_${o.expiryDate}`)
+      );
       const newRecords = parseResult.validRecords.filter(
-        o => !existingKeys.has(`${o.symbol}_${o.date}_${o.expiryDate}`)
+        o => !existingImportedKeys.has(`${o.symbol}_${o.date}_${o.expiryDate}`)
       );
 
       const mergedRecords = [...this.localObservations, ...newRecords].sort((a, b) =>
@@ -821,7 +839,7 @@ class MarketDataService {
           ? 'User-Attested Bhavcopy CSV File (Not Independently Verified)'
           : 'User-Imported MCX Bhavcopy Dataset',
         validRows: mergedRecords.length,
-        totalRows: (this.metadata.totalRows || 0) + parseResult.metadata.totalRows,
+        totalRows: mergedRecords.length,
         rejectedRows: (this.metadata.rejectedRows || 0) + parseResult.metadata.rejectedRows,
         duplicateCount: (this.metadata.duplicateCount || 0) + mergeAnalysis.unchangedDuplicatesCount,
         dateRange: {

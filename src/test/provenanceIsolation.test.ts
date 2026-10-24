@@ -192,9 +192,12 @@ describe('AUREX Provenance-Isolated Analytics & Decision Integrity Suite (Phase 
 
   // 11. Conflicting import records do not silently overwrite existing data
   it('Scenario 11: Conflicting import records do not silently overwrite existing observations', () => {
-    // Attempting to import an observation with the same date/contract but divergent close price
+    // Ingest valid imported observation first
+    marketDataService.importFromCsv(SAMPLE_IMPORTED_CSV, 'test_bhavcopy_21102026.csv');
+
+    // Attempting to import an observation with the same date/contract but divergent close price within imported provenance
     const CONFLICTING_CSV = `Date,Instrument,Symbol,Expiry Date,Open,High,Low,Close,Volume,Open Interest
-2026-10-08,FUTCOM,GOLDM,2026-11-05,76000.00,100000.00,75800.00,99999.00,100,500`;
+2026-10-21,FUTCOM,GOLDM,2026-11-05,144000.00,160000.00,143800.00,159000.00,450,1200`;
 
     expect(() => {
       marketDataService.importFromCsv(CONFLICTING_CSV, 'conflict.csv', undefined, false);
