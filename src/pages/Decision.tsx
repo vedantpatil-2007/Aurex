@@ -354,8 +354,37 @@ export const Decision: React.FC<DecisionPageProps> = ({
         </div>
       </div>
 
+      {/* Explicit Empty Dataset Warning when 0 observations exist */}
+      {(!availableDates || availableDates.length === 0) && (
+        <div className="bg-amber-50 border-2 border-amber-300 rounded-xl p-4 sm:p-5 shadow-sm space-y-3">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <h4 className="text-sm font-bold text-amber-950 font-mono">
+                No Market Observations Loaded in {dataMode || 'Active'} Mode
+              </h4>
+              <p className="text-xs text-amber-900 leading-relaxed">
+                The active dataset contains 0 market observations. To evaluate relative-value arbitrage opportunities, calculate statistical edge, or test execution friction, please ingest MCX Bhavcopy CSV files or load the 60-session historical dataset in Data Lab.
+              </p>
+              <p className="text-xs text-amber-800 leading-relaxed italic">
+                AUREX enforces institutional discipline: execution signals are never fabricated when market data is absent.
+              </p>
+            </div>
+          </div>
+          <div className="pt-2 border-t border-amber-200">
+            <button
+              onClick={() => onNavigate('data-lab')}
+              className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-mono font-bold text-xs rounded-lg transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer"
+            >
+              <span>Go to Data Lab & Load Dataset</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Explicit Missing Contemporaneous Pair Data Warning */}
-      {hasSpreadData === false && (
+      {hasSpreadData === false && availableDates && availableDates.length > 0 && (
         <div className="bg-amber-50 border-2 border-amber-300 rounded-xl p-4 sm:p-5 shadow-sm space-y-3">
           <div className="flex items-start gap-3">
             <AlertTriangle className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />

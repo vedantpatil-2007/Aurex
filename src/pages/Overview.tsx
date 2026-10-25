@@ -17,7 +17,8 @@ import {
   SlidersHorizontal, 
   Cpu, 
   ArrowRight,
-  Compass
+  Compass,
+  AlertTriangle
 } from 'lucide-react';
 
 interface OverviewPageProps {
@@ -84,6 +85,30 @@ export const Overview: React.FC<OverviewPageProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Alert when 0 records in active dataset */}
+      {dataHealth.totalRecords === 0 && (
+        <div className="bg-amber-50 border-2 border-amber-300 rounded-xl p-4 sm:p-5 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
+            <div className="space-y-0.5">
+              <h4 className="text-sm font-bold text-amber-950 font-mono">
+                No Market Observations in Active Dataset Mode
+              </h4>
+              <p className="text-xs text-amber-900 leading-relaxed">
+                The active mode has 0 observations in browser storage. Ingest MCX Bhavcopy CSV files or load the authentic 60-session historical dataset in Data Lab.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => onNavigate('data-lab')}
+            className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-mono font-bold text-xs rounded-lg transition-colors flex items-center gap-1.5 shadow-xs shrink-0 cursor-pointer"
+          >
+            <span>Open Data Lab</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* Beginner & Judge "Start Here" Explanation Guide */}
       <StartHereGuide onNavigate={onNavigate} />

@@ -83,29 +83,124 @@ export const DataLab: React.FC<DataLabProps> = ({
   const [attestationNotesInput, setAttestationNotesInput] = useState('User asserted origin from official MCX Bhavcopy archive');
   const [restorePreview, setRestorePreview] = useState<{ validation: BackupValidationResult; rawContent: string; fileName: string } | null>(null);
   const [restoreMessage, setRestoreMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isProcessingBatch, setIsProcessingBatch] = useState(false);
+  const [batchProgress, setBatchProgress] = useState<string | null>(null);
 
-  // Handle file selection
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setSelectedFile(file);
+  // Process selected or dropped file(s)
+  const processFiles = async (fileList: File[]) => {
+    if (!fileList || fileList.length === 0) return;
     setParseError(null);
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const text = event.target?.result as string;
-      setCsvRawText(text);
-      try {
-        const { parseResult } = marketDataService.analyzeImportMerge(text, file.name);
-        setParsePreview(parseResult);
-        setCustomMapping(parseResult.columnMapping);
-        setActiveTab('preview');
-      } catch (err: any) {
-        setParseError(err.message || 'Failed to parse CSV file.');
+    // Single file upload
+    if (fileList.length === 1) {
+      const file = fileList[0];
+      setSelectedFile(file);
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const text = (event.target?.result as string) || '';
+        setCsvRawText(text);
+
+        // Auto-detect JSON backup payload even if dropped or selected in main upload zone
+        const trimmed = text.trim();
+        if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+          const validation = marketDataService.validateBackup(trimmed);
+          if (validation.isValid) {
+            setRestorePreview({
+              validation,
+              rawContent: trimmed,
+              fileName: file.name
+            });
+            return;
+          }
+        }
+
+        // Parse as CSV / Bhavcopy
+        try {
+          const { parseResult } = marketDataService.analyzeImportMerge(text, file.name);
+          setParsePreview(parseResult);
+          setCustomMapping(parseResult.columnMapping);
+          setActiveTab('preview');
+        } catch (err: any) {
+          setParseError(err.message || 'Failed to parse CSV file.');
+        }
+      };
+      reader.readAsText(file);
+      return;
+    }
+
+    // Multi-file batch upload (e.g. 60 Bhavcopy CSVs)
+    setIsProcessingBatch(true);
+    setBatchProgress(`Reading ${fileList.length} files...`);
+
+    try {
+      const batchFiles: Array<{ name: string; content: string }> = [];
+      for (let i = 0; i < fileList.length; i++) {
+        const f = fileList[i];
+        const content = await f.text();
+        batchFiles.push({ name: f.name, content });
       }
-    };
-    reader.readAsText(file);
+
+      setBatchProgress(`Parsing and merging ${fileList.length} Bhavcopy files...`);
+      const result = await marketDataService.importBatchFromCsv(batchFiles);
+
+      setRestoreMessage({
+        type: 'success',
+        text: `${result.message} Workspace now contains ${result.finalTotalStoredCount} observations across ${result.finalDistinctDatesCount} trading dates (${result.finalDateRange.start} → ${result.finalDateRange.end}).`
+      });
+      onDatasetChanged();
+      setActiveTab('current');
+    } catch (err: any) {
+      setParseError(err.message || 'Batch import failed.');
+    } finally {
+      setIsProcessingBatch(false);
+      setBatchProgress(null);
+    }
+  };
+
+  // Handle file input change
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files ? Array.from(e.target.files) : [];
+    processFiles(files);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    const files = e.dataTransfer.files ? Array.from(e.dataTransfer.files) : [];
+    processFiles(files);
+  };
+
+  // Load authentic 60-session historical MCX Bhavcopy dataset (1,440 observations)
+  const handleLoadHistoricalDataset = () => {
+    try {
+      const res = marketDataService.loadBundledHistoricalDataset();
+      setRestoreMessage({
+        type: 'success',
+        text: `Loaded authentic 60-session historical MCX Bhavcopy dataset: ${res.finalTotalStoredCount} observations across ${res.finalDistinctDatesCount} trading dates (${res.finalDateRange.start} → ${res.finalDateRange.end}).`
+      });
+      onDatasetChanged();
+      setActiveTab('current');
+    } catch (err: any) {
+      setRestoreMessage({
+        type: 'error',
+        text: err.message || 'Failed to load historical Bhavcopy dataset.'
+      });
+    }
   };
 
   // Load bundled illustrative MCX Bhavcopy sample (Unverified)
@@ -356,6 +451,30 @@ export const DataLab: React.FC<DataLabProps> = ({
         </button>
       </div>
 
+      {/* Alert when IMPORTED mode has 0 records */}
+      {effectiveMode === 'IMPORTED_ONLY' && importedStoredCount === 0 && (
+        <div className="bg-amber-50 border border-amber-300 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-xs">
+          <div className="flex items-start gap-2.5">
+            <AlertTriangle className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
+            <div className="space-y-0.5">
+              <div className="font-bold font-mono text-amber-950">
+                No Imported Market Observations Found in Browser Storage
+              </div>
+              <p className="text-amber-900 leading-relaxed">
+                AUREX is in <span className="font-mono font-bold">IMPORTED</span> mode, but no historical Bhavcopy records are stored in this browser session. Click <strong className="text-amber-950">Load 60-Session Historical Dataset</strong> to immediately restore the authentic 1,440 MCX Bhavcopy observations (July 31 – Oct 23, 2026), or upload your Bhavcopy CSV files.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={handleLoadHistoricalDataset}
+            className="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white font-mono font-bold rounded-lg text-xs shrink-0 shadow-xs cursor-pointer flex items-center gap-1.5 self-start sm:self-auto"
+          >
+            <Database className="w-3.5 h-3.5" />
+            <span>Load 60 Sessions (1,440 Obs)</span>
+          </button>
+        </div>
+      )}
+
       {/* Compact Active Dataset Summary Panel */}
       <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-5 shadow-sm space-y-3">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -520,12 +639,20 @@ export const DataLab: React.FC<DataLabProps> = ({
         id="backup-json-file-upload"
       />
 
-      {/* CSV Upload / Drag-and-Drop Area */}
-      <div className="bg-white border-2 border-dashed border-slate-300 hover:border-amber-500 rounded-xl p-5 sm:p-6 text-center transition-colors shadow-xs">
+      {/* CSV / Bhavcopy Upload & Drag-and-Drop Area */}
+      <div
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        className={`bg-white border-2 border-dashed rounded-xl p-5 sm:p-6 text-center transition-colors shadow-xs ${
+          isDragging ? 'border-amber-500 bg-amber-50/50' : 'border-slate-300 hover:border-amber-500'
+        }`}
+      >
         <input
           ref={fileInputRef}
           type="file"
-          accept=".csv,text/csv"
+          multiple
+          accept=".csv,text/csv,.bhavcopy,.txt,application/json,.json"
           onChange={handleFileChange}
           className="hidden"
           id="csv-file-upload"
@@ -540,18 +667,27 @@ export const DataLab: React.FC<DataLabProps> = ({
               Data Sourcing & Ingestion Lab
             </h3>
             <p className="text-xs text-slate-600 leading-relaxed max-w-lg mx-auto mt-1">
-              Have a market-data CSV file? Upload it here to analyze its contents. If you are exploring AUREX for the first time, start with the bundled demo data instead.
+              Upload MCX Bhavcopy CSV files (single or multi-file batch) or JSON dataset backups to analyze historical market data. Or restore the 60-session historical dataset with 1 click.
             </p>
           </div>
 
-          {/* Primary Demo Action & Secondary Upload Action */}
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-1">
+          {/* Action Buttons: 60-Session Historical Dataset, Demo Data, and File Upload */}
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-1 flex-wrap">
+            <button
+              onClick={handleLoadHistoricalDataset}
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg text-xs shadow-sm font-mono transition-colors cursor-pointer"
+              title="Loads the complete 60-session historical MCX Bhavcopy dataset (1,440 observations, July 31 - Oct 23, 2026)"
+            >
+              <Database className="w-4 h-4 text-white" />
+              <span>Load 60-Session Historical Dataset</span>
+            </button>
+
             <button
               onClick={handleLoadBundledSample}
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg text-xs shadow-sm font-mono transition-colors cursor-pointer"
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg text-xs shadow-sm font-mono transition-colors cursor-pointer"
             >
               <Database className="w-4 h-4 text-slate-950" />
-              <span>Explore Demo Data</span>
+              <span>Explore Demo Sample</span>
             </button>
 
             <label
@@ -559,18 +695,25 @@ export const DataLab: React.FC<DataLabProps> = ({
               className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-amber-400 font-bold rounded-lg text-xs cursor-pointer shadow-sm font-mono transition-colors"
             >
               <Upload className="w-3.5 h-3.5" />
-              <span>Upload Market Data CSV (Optional)</span>
+              <span>Upload Bhavcopy CSVs (Batch Supported)</span>
             </label>
           </div>
+
+          {isProcessingBatch && (
+            <div className="bg-amber-50 border border-amber-300 rounded-lg p-2.5 text-xs font-mono font-bold text-amber-900 animate-pulse">
+              {batchProgress}
+            </div>
+          )}
+
           <div className="text-[11px] text-slate-500">
-            or drag and drop your file here
+            or drag and drop multiple CSV / Bhavcopy / JSON files here
           </div>
 
           {/* 4-step upload explanation */}
           <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-[11px] text-slate-600 grid grid-cols-2 sm:grid-cols-4 gap-2 text-left font-mono">
-            <div><span className="font-bold text-slate-900">1. Select File:</span> Bhavcopy CSV</div>
-            <div><span className="font-bold text-slate-900">2. Auto-Detect:</span> Columns detected</div>
-            <div><span className="font-bold text-slate-900">3. Review:</span> Check validation log</div>
+            <div><span className="font-bold text-slate-900">1. Select Files:</span> Single or batch CSVs</div>
+            <div><span className="font-bold text-slate-900">2. Auto-Detect:</span> Columns & JSON auto-detected</div>
+            <div><span className="font-bold text-slate-900">3. Review:</span> Check validation & rejections</div>
             <div><span className="font-bold text-slate-900">4. Confirm:</span> Ingest for analysis</div>
           </div>
 

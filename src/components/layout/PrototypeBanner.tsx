@@ -63,7 +63,11 @@ export const PrototypeBanner: React.FC<PrototypeBannerProps> = ({
     const impCount = metadata?.provenanceBreakdown?.userImportedCount || 0;
     compactSummary = `Hybrid Dataset · ${(simCount + impCount || observationsCount).toLocaleString()} observations (${simCount} sim + ${impCount} imported) · Mixed Provenance`;
   } else if (isUserImported) {
-    compactSummary = `Imported · ${sourceFilesCount > 1 ? `${sourceFilesCount} source files` : (filename || 'Bhavcopy CSV')} · ${observationsCount.toLocaleString()} observations · Source unverified`;
+    if (observationsCount === 0) {
+      compactSummary = `Imported Mode · 0 observations loaded · Ingest Bhavcopy CSV in Data Lab`;
+    } else {
+      compactSummary = `Imported · ${sourceFilesCount > 1 ? `${sourceFilesCount} source files` : (filename || 'Bhavcopy CSV')} · ${observationsCount.toLocaleString()} observations · Source unverified`;
+    }
   } else if (isSample) {
     compactSummary = `Sample Schema · ${observationsCount.toLocaleString()} observations · Unverified Sourcing`;
   } else {

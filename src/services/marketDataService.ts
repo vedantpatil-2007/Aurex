@@ -16,10 +16,13 @@ import {
   DataSufficiencyAssessment,
   DatasetBackupV1,
   BackupValidationResult,
-  RestoreResult
+  RestoreResult,
+  BatchImportFile,
+  BatchImportResult
 } from '../types/market';
 import { CONTRACT_SPECIFICATIONS, CONTRACT_LIST } from '../data/contracts';
 import { SEED_MARKET_DATA } from '../data/seedMarketData';
+import { HISTORICAL_BHAVCOPY_BACKUP } from '../data/historicalBhavcopyData';
 import { normalizeObservation } from '../engines/normalizationEngine';
 import { validateMarketData } from '../utils/dataQuality';
 import { parseBhavcopyCsv, ParseResult, ColumnMapping, computeFileSha256, computeQuickHash } from './csvParserService';
@@ -32,6 +35,17 @@ type DataChangeListener = (observations: MarketObservation[]) => void;
 const STORAGE_KEY = 'aurex_imported_dataset_v2';
 const METADATA_KEY = 'aurex_imported_metadata_v2';
 const DATA_MODE_KEY = 'aurex_data_mode_v2';
+
+const LEGACY_STORAGE_KEYS = [
+  'aurex_imported_dataset',
+  'aurex_imported_dataset_v1',
+  'aurex_custom_dataset'
+];
+
+const LEGACY_METADATA_KEYS = [
+  'aurex_imported_metadata',
+  'aurex_imported_metadata_v1'
+];
 
 /**
  * AUREX Market Data Service (Round 2 Unified Data Engine)
@@ -56,7 +70,7 @@ class MarketDataService {
   private tryRestoreDataMode(): DataMode {
     if (typeof window === 'undefined' || !window.localStorage) return 'ALL';
     try {
-      const stored = localStorage.getItem(DATA_MODE_KEY);
+      const stored = window.localStorage.getItem(DATA_MODE_KEY);
       if (stored === 'ALL' || stored === 'PROTOTYPE_ONLY' || stored === 'IMPORTED_ONLY') {
         return stored as DataMode;
       }
@@ -75,7 +89,7 @@ class MarketDataService {
     this.activeDataMode = mode;
     if (typeof window !== 'undefined' && window.localStorage) {
       try {
-        localStorage.setItem(DATA_MODE_KEY, mode);
+        window.localStorage.setItem(DATA_MODE_KEY, mode);
       } catch (e) {
         console.warn('Could not persist dataMode to localStorage:', e);
       }
@@ -86,11 +100,35 @@ class MarketDataService {
   private tryRestoreFromLocalStorage(): void {
     if (typeof window === 'undefined' || !window.localStorage) return;
     try {
-      const storedData = localStorage.getItem(STORAGE_KEY);
-      const storedMeta = localStorage.getItem(METADATA_KEY);
-      if (storedData && storedMeta) {
+      let storedData = window.localStorage.getItem(STORAGE_KEY);
+      let storedMeta = window.localStorage.getItem(METADATA_KEY);
+      let migratedFromLegacy = false;
+
+      // Schema migration: Check legacy storage keys if primary v2 key is absent
+      if (!storedData) {
+        for (const legacyKey of LEGACY_STORAGE_KEYS) {
+          const legacyData = window.localStorage.getItem(legacyKey);
+          if (legacyData) {
+            storedData = legacyData;
+            migratedFromLegacy = true;
+            break;
+          }
+        }
+      }
+
+      if (!storedMeta) {
+        for (const legacyKey of LEGACY_METADATA_KEYS) {
+          const legacyMeta = window.localStorage.getItem(legacyKey);
+          if (legacyMeta) {
+            storedMeta = legacyMeta;
+            break;
+          }
+        }
+      }
+
+      if (storedData) {
         const parsedObservations = JSON.parse(storedData) as MarketObservation[];
-        const parsedMeta = JSON.parse(storedMeta) as DatasetMetadata;
+        const parsedMeta = storedMeta ? (JSON.parse(storedMeta) as DatasetMetadata) : null;
         if (Array.isArray(parsedObservations) && parsedObservations.length > 0) {
           const hasPrototype = parsedObservations.some(
             o => o.provenance === 'PROTOTYPE SIMULATION' || (!o.provenance && o.date <= '2026-10-08')
@@ -101,12 +139,29 @@ class MarketDataService {
           } else {
             this.localObservations = parsedObservations;
           }
-          this.metadata = {
-            ...parsedMeta,
-            storagePersistence: 'LOCAL_STORAGE'
-          };
-          this.provenance = parsedMeta.provenance || 'USER-IMPORTED DATA — SOURCE UNVERIFIED';
+          if (parsedMeta) {
+            this.metadata = {
+              ...parsedMeta,
+              storagePersistence: 'LOCAL_STORAGE'
+            };
+            this.provenance = parsedMeta.provenance || 'USER-IMPORTED DATA — SOURCE UNVERIFIED';
+          } else {
+            this.metadata = {
+              ...this.buildSimulationMetadata(),
+              provenance: 'USER-IMPORTED DATA — SOURCE UNVERIFIED',
+              filename: 'migrated_imported_dataset.csv',
+              storagePersistence: 'LOCAL_STORAGE',
+              validRows: parsedObservations.length,
+              totalRows: this.localObservations.length
+            };
+            this.provenance = 'USER-IMPORTED DATA — SOURCE UNVERIFIED';
+          }
           this.isPersistedInLocalStorage = true;
+
+          // If restored from legacy key, migrate forward into current v2 storage keys
+          if (migratedFromLegacy) {
+            this.saveToLocalStorage();
+          }
         }
       }
     } catch (e) {
@@ -117,8 +172,8 @@ class MarketDataService {
   private saveToLocalStorage(): void {
     if (typeof window === 'undefined' || !window.localStorage) return;
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(this.localObservations));
-      localStorage.setItem(METADATA_KEY, JSON.stringify(this.metadata));
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(this.localObservations));
+      window.localStorage.setItem(METADATA_KEY, JSON.stringify(this.metadata));
       this.isPersistedInLocalStorage = true;
       this.metadata.storagePersistence = 'LOCAL_STORAGE';
     } catch (e) {
@@ -317,7 +372,9 @@ class MarketDataService {
     if (mode === 'PROTOTYPE_ONLY') {
       filename = 'seed_prototype_simulation.internal';
     } else if (mode === 'IMPORTED_ONLY') {
-      if (distinctSourceFiles.length > 1) {
+      if (modeObs.length === 0) {
+        filename = 'No Imported Dataset';
+      } else if (distinctSourceFiles.length > 1) {
         filename = `${distinctSourceFiles.length} Bhavcopy CSVs (${distinctSourceFiles[0]} ... ${distinctSourceFiles[distinctSourceFiles.length - 1]})`;
       } else if (distinctSourceFiles.length === 1) {
         filename = distinctSourceFiles[0];
@@ -328,7 +385,7 @@ class MarketDataService {
       } else if (this.metadata.filename && this.metadata.filename !== 'seed_prototype_simulation.internal' && this.metadata.filename !== 'custom_bhavcopy.csv') {
         filename = this.metadata.filename;
       } else {
-        filename = 'imported_historical_market_data.bhavcopy';
+        filename = 'No Imported Dataset';
       }
     } else {
       // mode === 'ALL'
@@ -962,6 +1019,232 @@ class MarketDataService {
   }
 
   /**
+   * Loads the authentic 60-session historical MCX Bhavcopy dataset (1,440 observations, 2026-07-31 to 2026-10-23).
+   * Provenance strictly set to 'USER-IMPORTED DATA — SOURCE UNVERIFIED'.
+   * Never marked as verified without exchange credentials.
+   */
+  public loadBundledHistoricalDataset(): RestoreResult {
+    const result = this.restoreDatasetBackup(HISTORICAL_BHAVCOPY_BACKUP, { forceReplace: true });
+    return result;
+  }
+
+  /**
+   * Auto-detecting payload import supporting single file (CSV or JSON backup)
+   */
+  public importPayload(
+    content: string,
+    filename = 'user_upload.csv',
+    forceReplace = false
+  ): { type: 'CSV' | 'BACKUP'; result: ParseResult | RestoreResult } {
+    const trimmed = content.trim();
+    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+      const validation = this.validateBackup(content);
+      if (validation.isValid) {
+        const restoreRes = this.restoreDatasetBackup(content, { forceReplace });
+        return { type: 'BACKUP', result: restoreRes };
+      }
+    }
+    const parseRes = this.importFromCsv(content, filename, undefined, forceReplace);
+    return { type: 'CSV', result: parseRes };
+  }
+
+  /**
+   * Batch imports multiple Bhavcopy CSV files and/or JSON backups simultaneously.
+   * Quarantines non-futures/options, deduplicates identical observations, isolates prototype data,
+   * tracks all source files with SHA-256 hashes, and commits atomically to local storage.
+   */
+  public async importBatchFromCsv(
+    files: BatchImportFile[],
+    options?: { forceReplace?: boolean }
+  ): Promise<BatchImportResult> {
+    if (!files || files.length === 0) {
+      throw new Error('No files provided for batch import.');
+    }
+
+    const forceReplace = options?.forceReplace ?? false;
+    const errors: string[] = [];
+    const allValidIncoming: MarketObservation[] = [];
+    const incomingSourceFiles: ImportedSourceFileMetadata[] = [];
+    let quarantinedRowsCount = 0;
+
+    for (const file of files) {
+      try {
+        const trimmed = file.content.trim();
+        // Check if JSON backup payload
+        if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+          const validation = this.validateBackup(trimmed);
+          if (validation.isValid) {
+            const parsed = JSON.parse(trimmed) as DatasetBackupV1;
+            allValidIncoming.push(...parsed.observations);
+            if (parsed.metadata?.sourceFiles) {
+              incomingSourceFiles.push(...parsed.metadata.sourceFiles);
+            } else {
+              incomingSourceFiles.push({
+                filename: file.name,
+                fileHashSha256: await computeFileSha256(file.content),
+                dateRange: parsed.dateRange,
+                validRows: parsed.observations.length,
+                importTimestamp: parsed.exportedAt || new Date().toISOString()
+              });
+            }
+            continue;
+          }
+        }
+
+        // Parse as CSV
+        const fileHash = await computeFileSha256(file.content);
+        const parseResult = parseBhavcopyCsv(
+          file.content,
+          file.name,
+          'USER-IMPORTED DATA — SOURCE UNVERIFIED',
+          undefined,
+          fileHash
+        );
+
+        allValidIncoming.push(...parseResult.validRecords);
+        quarantinedRowsCount += parseResult.rejectedRows.length;
+
+        incomingSourceFiles.push({
+          filename: file.name,
+          fileHashSha256: fileHash,
+          dateRange: parseResult.metadata.dateRange,
+          validRows: parseResult.validRecords.length,
+          importTimestamp: new Date().toISOString()
+        });
+      } catch (err: any) {
+        errors.push(`File "${file.name}": ${err.message || 'Parsing failed'}`);
+      }
+    }
+
+    if (allValidIncoming.length === 0) {
+      throw new Error(`Batch import failed: 0 valid records found across ${files.length} files. Errors: [${errors.join('; ')}]`);
+    }
+
+    // Isolate by provenance: compare against existing imported records only
+    const existingImported = forceReplace
+      ? []
+      : this.localObservations.filter(o => o.provenance !== 'PROTOTYPE SIMULATION');
+    const existingMap = new Map<string, MarketObservation>();
+    for (const obs of existingImported) {
+      existingMap.set(`${obs.symbol}_${obs.date}_${obs.expiryDate}`, obs);
+    }
+
+    let newlyInsertedCount = 0;
+    let unchangedDuplicatesCount = 0;
+    const conflictingObservations: MergeConflictDetail[] = [];
+    const newRecordsToInsert: MarketObservation[] = [];
+    const seenIncomingKeys = new Set<string>();
+
+    for (const inc of allValidIncoming) {
+      const key = `${inc.symbol}_${inc.date}_${inc.expiryDate}`;
+      if (seenIncomingKeys.has(key)) {
+        unchangedDuplicatesCount++;
+        continue;
+      }
+      seenIncomingKeys.add(key);
+
+      const ext = existingMap.get(key);
+      if (!ext) {
+        newlyInsertedCount++;
+        newRecordsToInsert.push({
+          date: inc.date,
+          symbol: inc.symbol,
+          expiryDate: inc.expiryDate,
+          open: inc.open ?? inc.close,
+          high: inc.high ?? inc.close,
+          low: inc.low ?? inc.close,
+          close: inc.close,
+          volume: inc.volume ?? 0,
+          openInterest: inc.openInterest ?? 0,
+          provenance: 'USER-IMPORTED DATA — SOURCE UNVERIFIED',
+          sourceFile: inc.sourceFile,
+          sourceSha256: inc.sourceSha256
+        });
+      } else {
+        const isPriceDiff = Math.abs(ext.close - inc.close) > 0.01;
+        if (!isPriceDiff) {
+          unchangedDuplicatesCount++;
+        } else {
+          conflictingObservations.push({
+            symbol: inc.symbol,
+            date: inc.date,
+            expiryDate: inc.expiryDate,
+            existingClose: ext.close,
+            incomingClose: inc.close,
+            difference: `existing: ₹${ext.close} vs incoming: ₹${inc.close}`
+          });
+        }
+      }
+    }
+
+    if (conflictingObservations.length > 0 && !forceReplace) {
+      throw new Error(
+        `Batch import conflict: Detected ${conflictingObservations.length} conflicting observation(s) on existing contract dates. ` +
+        `Conflicting records: [${conflictingObservations.map(c => `${c.symbol} ${c.date} (${c.difference})`).join('; ')}]. ` +
+        `Silent overwriting is prevented.`
+      );
+    }
+
+    // Merge records into local observations preserving prototype simulation records
+    const protoRecords = this.localObservations.filter(o => o.provenance === 'PROTOTYPE SIMULATION');
+    const mergedImported = forceReplace
+      ? newRecordsToInsert.sort((a, b) => a.date.localeCompare(b.date))
+      : [...existingImported, ...newRecordsToInsert].sort((a, b) => a.date.localeCompare(b.date));
+
+    this.localObservations = [...protoRecords, ...mergedImported];
+    this.provenance = 'USER-IMPORTED DATA — SOURCE UNVERIFIED';
+
+    // Merge source files metadata
+    const existingFiles = (forceReplace ? [] : this.metadata.sourceFiles) || [];
+    const existingHashes = new Set(existingFiles.map(f => f.fileHashSha256));
+    const mergedFiles = [...existingFiles];
+    for (const sf of incomingSourceFiles) {
+      if (!existingHashes.has(sf.fileHashSha256)) {
+        existingHashes.add(sf.fileHashSha256);
+        mergedFiles.push(sf);
+      }
+    }
+
+    const allDates = Array.from(new Set(mergedImported.map(o => o.date))).sort();
+    const coverage = this.recalculateCoverage(mergedImported);
+
+    this.metadata = {
+      ...this.metadata,
+      provenance: 'USER-IMPORTED DATA — SOURCE UNVERIFIED',
+      filename: mergedFiles.length > 1
+        ? `${mergedFiles.length} Bhavcopy CSVs (${mergedFiles[0].filename} ... ${mergedFiles[mergedFiles.length - 1].filename})`
+        : mergedFiles[0]?.filename || 'batch_import.csv',
+      validRows: mergedImported.length,
+      totalRows: this.localObservations.length,
+      duplicateCount: (this.metadata.duplicateCount || 0) + unchangedDuplicatesCount,
+      rejectedRows: (this.metadata.rejectedRows || 0) + quarantinedRowsCount,
+      dateRange: { start: allDates[0] || 'N/A', end: allDates[allDates.length - 1] || 'N/A' },
+      contractCoverage: coverage,
+      sourceFiles: mergedFiles,
+      importTimestamp: new Date().toISOString()
+    };
+
+    this.saveToLocalStorage();
+    this.emitChange();
+
+    return {
+      success: true,
+      message: `Batch import complete: ${files.length} file(s) processed. Added ${newlyInsertedCount} new observation(s) (${unchangedDuplicatesCount} unchanged duplicates skipped).`,
+      totalFilesProcessed: files.length,
+      validRecordsCount: allValidIncoming.length,
+      newlyInsertedCount,
+      unchangedDuplicatesCount,
+      quarantinedRowsCount,
+      conflictsCount: conflictingObservations.length,
+      conflictingObservations,
+      finalTotalStoredCount: mergedImported.length,
+      finalDistinctDatesCount: allDates.length,
+      finalDateRange: { start: allDates[0] || 'N/A', end: allDates[allDates.length - 1] || 'N/A' },
+      errors
+    };
+  }
+
+  /**
    * Records a user assertion/attestation that an uploaded file originated from MCX.
    * Explicitly sets provenance to 'USER-ATTESTED SOURCE — NOT INDEPENDENTLY VERIFIED'.
    */
@@ -1427,6 +1710,13 @@ class MarketDataService {
   }
 
   /**
+   * Checks whether any user-imported observations exist in the active memory dataset
+   */
+  public hasImportedData(): boolean {
+    return this.localObservations.some(o => o.provenance !== 'PROTOTYPE SIMULATION');
+  }
+
+  /**
    * Checks whether active dataset is persisted in browser localStorage
    */
   public hasPersistedData(): boolean {
@@ -1439,8 +1729,8 @@ class MarketDataService {
   public clearPersistedData(): void {
     if (typeof window !== 'undefined' && window.localStorage) {
       try {
-        localStorage.removeItem(STORAGE_KEY);
-        localStorage.removeItem(METADATA_KEY);
+        window.localStorage.removeItem(STORAGE_KEY);
+        window.localStorage.removeItem(METADATA_KEY);
       } catch (e) {
         console.warn('Error clearing localStorage:', e);
       }
@@ -1466,8 +1756,8 @@ class MarketDataService {
   public clearDataset(): void {
     if (typeof window !== 'undefined' && window.localStorage) {
       try {
-        localStorage.removeItem(STORAGE_KEY);
-        localStorage.removeItem(METADATA_KEY);
+        window.localStorage.removeItem(STORAGE_KEY);
+        window.localStorage.removeItem(METADATA_KEY);
       } catch (e) {
         console.warn('Error clearing localStorage:', e);
       }

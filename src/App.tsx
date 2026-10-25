@@ -107,10 +107,10 @@ export function App() {
     return marketDataService.getAvailableDates(dataMode);
   }, [dataVersion, dataMode, rawObservations]);
 
-  const latestAvailableDate = availableDates[availableDates.length - 1] || '2026-10-08';
+  const latestAvailableDate = availableDates.length > 0 ? availableDates[availableDates.length - 1] : '';
 
   const [selectedDate, setSelectedDate] = useState<string>(() => {
-    return availableDates.slice(-1)[0] || '2026-10-08';
+    return availableDates.length > 0 ? availableDates[availableDates.length - 1] : '';
   });
 
   const prevModeRef = useRef<DataMode>(dataMode);
@@ -123,11 +123,15 @@ export function App() {
       const modeDates = marketDataService.getAvailableDates(dataMode);
       if (modeDates.length > 0) {
         setSelectedDate(modeDates[modeDates.length - 1]);
+      } else {
+        setSelectedDate('');
       }
     } else if (availableDates.length > prevDatesLengthRef.current) {
       setSelectedDate(availableDates[availableDates.length - 1]);
-    } else if (availableDates.length > 0 && !availableDates.includes(selectedDate)) {
+    } else if (availableDates.length > 0 && (!selectedDate || !availableDates.includes(selectedDate))) {
       setSelectedDate(availableDates[availableDates.length - 1]);
+    } else if (availableDates.length === 0 && selectedDate !== '') {
+      setSelectedDate('');
     }
     prevDatesLengthRef.current = availableDates.length;
   }, [dataMode, availableDates, selectedDate]);
@@ -293,11 +297,13 @@ export function App() {
       oiB: latestB?.openInterest || 0,
       friction,
       dataSufficiency,
-      isCalculable: hasActiveSpread && zScoreAnalysis.isCalculable,
-      incalculableReason: !hasActiveSpread
-        ? (contemporaneousSpread.reason || `No contemporaneous observations exist for ${selectedPair[0]} / ${selectedPair[1]} on ${selectedDate}`)
+      isCalculable: rawObservations.length > 0 && hasActiveSpread && zScoreAnalysis.isCalculable,
+      incalculableReason: rawObservations.length === 0
+        ? `No market observations are loaded in ${dataMode} mode. Please ingest Bhavcopy CSV files in Data Lab.`
+        : !hasActiveSpread
+        ? (contemporaneousSpread.reason || `No contemporaneous observations exist for ${selectedPair[0]} / ${selectedPair[1]} on ${selectedDate || 'selected date'}`)
         : zScoreAnalysis.incalculableReason,
-      hasSpreadData: hasActiveSpread,
+      hasSpreadData: hasActiveSpread && rawObservations.length > 0,
       isTenderWindowRestricted: isTenderRestricted,
       tenderWindowReason: tenderReason,
       expiryDifferenceDays: expiryDiff,

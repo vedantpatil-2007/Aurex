@@ -306,6 +306,27 @@ export interface RestoreResult {
   finalDateRange: { start: string; end: string };
 }
 
+export interface BatchImportFile {
+  name: string;
+  content: string;
+}
+
+export interface BatchImportResult {
+  success: boolean;
+  message: string;
+  totalFilesProcessed: number;
+  validRecordsCount: number;
+  newlyInsertedCount: number;
+  unchangedDuplicatesCount: number;
+  quarantinedRowsCount: number;
+  conflictsCount: number;
+  conflictingObservations: MergeConflictDetail[];
+  finalTotalStoredCount: number;
+  finalDistinctDatesCount: number;
+  finalDateRange: { start: string; end: string };
+  errors: string[];
+}
+
 export interface RejectedRow {
   rowNumber: number;
   raw: Record<string, string>;
