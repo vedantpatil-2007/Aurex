@@ -92,7 +92,15 @@ class MarketDataService {
         const parsedObservations = JSON.parse(storedData) as MarketObservation[];
         const parsedMeta = JSON.parse(storedMeta) as DatasetMetadata;
         if (Array.isArray(parsedObservations) && parsedObservations.length > 0) {
-          this.localObservations = parsedObservations;
+          const hasPrototype = parsedObservations.some(
+            o => o.provenance === 'PROTOTYPE SIMULATION' || (!o.provenance && o.date <= '2026-10-08')
+          );
+          if (!hasPrototype) {
+            // Preserve seed prototype records in memory so PROTOTYPE_ONLY mode and simulation demonstrations remain fully functional
+            this.localObservations = [...SEED_MARKET_DATA, ...parsedObservations];
+          } else {
+            this.localObservations = parsedObservations;
+          }
           this.metadata = {
             ...parsedMeta,
             storagePersistence: 'LOCAL_STORAGE'
@@ -300,8 +308,46 @@ class MarketDataService {
       }
     }
 
+    // Extract distinct source files directly from mode observations
+    const modeImportedObs = modeObs.filter(o => o.provenance !== 'PROTOTYPE SIMULATION');
+    const distinctSourceFiles = Array.from(new Set(modeImportedObs.map(o => o.sourceFile).filter(Boolean))) as string[];
+
+    // Determine truthful filename reflecting the active mode
+    let filename = this.metadata.filename;
+    if (mode === 'PROTOTYPE_ONLY') {
+      filename = 'seed_prototype_simulation.internal';
+    } else if (mode === 'IMPORTED_ONLY') {
+      if (distinctSourceFiles.length > 1) {
+        filename = `${distinctSourceFiles.length} Bhavcopy CSVs (${distinctSourceFiles[0]} ... ${distinctSourceFiles[distinctSourceFiles.length - 1]})`;
+      } else if (distinctSourceFiles.length === 1) {
+        filename = distinctSourceFiles[0];
+      } else if (sourceFiles && sourceFiles.length > 1) {
+        filename = `${sourceFiles.length} Bhavcopy CSVs (${sourceFiles[0].filename} ... ${sourceFiles[sourceFiles.length - 1].filename})`;
+      } else if (sourceFiles && sourceFiles.length === 1) {
+        filename = sourceFiles[0].filename;
+      } else if (this.metadata.filename && this.metadata.filename !== 'seed_prototype_simulation.internal' && this.metadata.filename !== 'custom_bhavcopy.csv') {
+        filename = this.metadata.filename;
+      } else {
+        filename = 'imported_historical_market_data.bhavcopy';
+      }
+    } else {
+      // mode === 'ALL'
+      if (distinctSourceFiles.length > 1) {
+        filename = `${distinctSourceFiles.length} Bhavcopy CSVs (${distinctSourceFiles[0]} ... ${distinctSourceFiles[distinctSourceFiles.length - 1]})`;
+      } else if (distinctSourceFiles.length === 1) {
+        filename = distinctSourceFiles[0];
+      } else if (sourceFiles && sourceFiles.length > 0) {
+        filename = sourceFiles.map(f => f.filename).join(', ');
+      } else if (breakdown.userImportedCount > 0 && this.metadata.filename !== 'seed_prototype_simulation.internal') {
+        filename = this.metadata.filename;
+      } else if (breakdown.prototypeSimulationCount > 0 && breakdown.userImportedCount === 0) {
+        filename = 'seed_prototype_simulation.internal';
+      }
+    }
+
     return {
       ...this.metadata,
+      filename,
       totalRows: totalStored,
       validRows: modeObs.length,
       duplicateCount: mode === 'PROTOTYPE_ONLY' ? 0 : (this.metadata.duplicateCount ?? 0),
@@ -1339,8 +1385,14 @@ class MarketDataService {
       const allImported = mergedRecords.filter(o => o.provenance !== 'PROTOTYPE SIMULATION');
       const allDates = Array.from(new Set(allImported.map(o => o.date))).sort();
 
+      const backupFilename = updatedFiles.length > 0
+        ? updatedFiles.map(f => f.filename).join(', ')
+        : (parsed.metadata?.filename || 'dataset_backup.json');
+
       this.metadata = {
         ...this.metadata,
+        provenance: targetProvenance,
+        filename: backupFilename,
         validRows: allImported.length,
         totalRows: mergedRecords.length,
         duplicateCount: (this.metadata.duplicateCount || 0) + unchangedDuplicatesCount,

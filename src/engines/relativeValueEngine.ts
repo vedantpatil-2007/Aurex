@@ -1,4 +1,148 @@
-import { RelativeValueSpreadPoint, ZScoreAnalysis, NormalizedObservation, ContractSymbol, StatisticalStatus } from '../types/market';
+import {
+  RelativeValueSpreadPoint,
+  ZScoreAnalysis,
+  NormalizedObservation,
+  ContractSymbol,
+  StatisticalStatus,
+  DataProvenance
+} from '../types/market';
+
+/**
+ * Checks if a provenance string belongs to the prototype simulation family.
+ */
+export function isPrototypeProvenance(provenance?: DataProvenance | string): boolean {
+  return provenance === 'PROTOTYPE SIMULATION' || !provenance;
+}
+
+/**
+ * Checks if two provenance strings belong to the same provenance family
+ * (both prototype or both user-imported/verified).
+ */
+export function isSameProvenanceFamily(provA?: DataProvenance | string, provB?: DataProvenance | string): boolean {
+  const isProtoA = isPrototypeProvenance(provA);
+  const isProtoB = isPrototypeProvenance(provB);
+  return isProtoA === isProtoB;
+}
+
+export interface ContemporaneousSpreadResult {
+  isContemporaneous: boolean;
+  spread: number;
+  spreadPercentage: number;
+  priceA?: number;
+  priceB?: number;
+  obsA?: NormalizedObservation;
+  obsB?: NormalizedObservation;
+  reason?: string;
+}
+
+/**
+ * Evaluates contemporaneous basis alignment for a contract pair on a specific valuation date.
+ * If both legs have observations belonging to the same provenance family on the date,
+ * calculates the normalized basis spread. Otherwise, provides the exact reason why contemporaneous
+ * spread cannot be formed (missing leg A, missing leg B, or provenance conflict).
+ */
+export function getContemporaneousPairSpread(
+  observations: NormalizedObservation[],
+  symbolA: ContractSymbol,
+  symbolB: ContractSymbol,
+  date: string
+): ContemporaneousSpreadResult {
+  if (!observations || observations.length === 0 || !date) {
+    return {
+      isContemporaneous: false,
+      spread: 0,
+      spreadPercentage: 0,
+      reason: `No observations available in active dataset as-of ${date || 'N/A'}.`
+    };
+  }
+
+  const onDateA = observations.filter(o => o.symbol === symbolA && o.date === date);
+  const onDateB = observations.filter(o => o.symbol === symbolB && o.date === date);
+
+  if (onDateA.length === 0 && onDateB.length === 0) {
+    return {
+      isContemporaneous: false,
+      spread: 0,
+      spreadPercentage: 0,
+      reason: `No market observations exist for neither ${symbolA} nor ${symbolB} on ${date}.`
+    };
+  }
+
+  if (onDateA.length === 0) {
+    return {
+      isContemporaneous: false,
+      spread: 0,
+      spreadPercentage: 0,
+      reason: `Missing observations for Leg A (${symbolA}) on trading date ${date}.`
+    };
+  }
+
+  if (onDateB.length === 0) {
+    return {
+      isContemporaneous: false,
+      spread: 0,
+      spreadPercentage: 0,
+      reason: `Missing observations for Leg B (${symbolB}) on trading date ${date}.`
+    };
+  }
+
+  const aImported = onDateA.filter(o => !isPrototypeProvenance(o.provenance));
+  const bImported = onDateB.filter(o => !isPrototypeProvenance(o.provenance));
+
+  let obsA: NormalizedObservation | undefined;
+  let obsB: NormalizedObservation | undefined;
+
+  if (aImported.length > 0 && bImported.length > 0) {
+    obsA = selectActiveObservation(aImported);
+    obsB = selectActiveObservation(bImported);
+  } else if (aImported.length === 0 && bImported.length === 0) {
+    const aProto = onDateA.filter(o => isPrototypeProvenance(o.provenance));
+    const bProto = onDateB.filter(o => isPrototypeProvenance(o.provenance));
+    obsA = selectActiveObservation(aProto);
+    obsB = selectActiveObservation(bProto);
+  } else {
+    const importedLeg = aImported.length > 0 ? symbolA : symbolB;
+    const protoLeg = aImported.length > 0 ? symbolB : symbolA;
+    return {
+      isContemporaneous: false,
+      spread: 0,
+      spreadPercentage: 0,
+      reason: `Provenance mismatch on ${date}: Leg ${importedLeg} has imported data while Leg ${protoLeg} only has prototype records. Cross-provenance pairing is prohibited.`
+    };
+  }
+
+  if (!obsA || !obsB) {
+    return {
+      isContemporaneous: false,
+      spread: 0,
+      spreadPercentage: 0,
+      reason: `Unable to select active contract observations for ${symbolA} / ${symbolB} on ${date}.`
+    };
+  }
+
+  if (!isSameProvenanceFamily(obsA.provenance, obsB.provenance)) {
+    return {
+      isContemporaneous: false,
+      spread: 0,
+      spreadPercentage: 0,
+      reason: `Cross-provenance pairing prohibited on ${date}: ${symbolA} (${obsA.provenance}) vs ${symbolB} (${obsB.provenance}).`
+    };
+  }
+
+  const spread = calculateSpread(obsA.normalizedPrice, obsB.normalizedPrice);
+  const avgPrice = (obsA.normalizedPrice + obsB.normalizedPrice) / 2;
+  const spreadPercentage = avgPrice > 0 ? Number(((spread / avgPrice) * 100).toFixed(4)) : 0;
+
+  return {
+    isContemporaneous: true,
+    spread,
+    spreadPercentage,
+    priceA: obsA.normalizedPrice,
+    priceB: obsB.normalizedPrice,
+    obsA,
+    obsB
+  };
+}
 
 /**
  * Selects the active near-month observation for a contract symbol on a specific date:
@@ -123,23 +267,37 @@ export function buildPairSpreadSeries(
     const bList = bDateGroups.get(date)!;
 
     // Strict single-provenance matching per trading date:
-    // If both series have user-imported observations on this date, pair them using imported data.
-    // Otherwise, pair them using prototype simulation data.
-    // Never cross provenance boundaries within the same date.
+    // 1. If both series have user-imported observations on this date, pair them strictly using imported data.
+    // 2. If neither series has imported observations, pair them strictly using prototype simulation data.
+    // 3. If only one leg has imported data on this date, NEVER cross provenance boundaries or silently use prototype data — skip date.
     const aImported = aList.filter(o => o.provenance !== 'PROTOTYPE SIMULATION');
     const bImported = bList.filter(o => o.provenance !== 'PROTOTYPE SIMULATION');
 
-    const useImported = aImported.length > 0 && bImported.length > 0;
-    const obsA = selectActiveObservation(useImported ? aImported : aList);
-    const obsB = selectActiveObservation(useImported ? bImported : bList);
+    let obsA: NormalizedObservation | undefined;
+    let obsB: NormalizedObservation | undefined;
+
+    if (aImported.length > 0 && bImported.length > 0) {
+      obsA = selectActiveObservation(aImported);
+      obsB = selectActiveObservation(bImported);
+    } else if (aImported.length === 0 && bImported.length === 0) {
+      const aProto = aList.filter(o => o.provenance === 'PROTOTYPE SIMULATION');
+      const bProto = bList.filter(o => o.provenance === 'PROTOTYPE SIMULATION');
+      obsA = selectActiveObservation(aProto);
+      obsB = selectActiveObservation(bProto);
+    } else {
+      // One leg is imported while the other is missing/prototype; skip date to prevent cross-provenance contamination
+      continue;
+    }
+
     if (!obsA || !obsB) continue;
+    if (!isSameProvenanceFamily(obsA.provenance, obsB.provenance)) continue;
 
     const spread = calculateSpread(obsA.normalizedPrice, obsB.normalizedPrice);
     const avgPrice = (obsA.normalizedPrice + obsB.normalizedPrice) / 2;
     const spreadPercentage = avgPrice > 0 ? Number(((spread / avgPrice) * 100).toFixed(4)) : 0;
     const provA = obsA.provenance || 'PROTOTYPE SIMULATION';
     const provB = obsB.provenance || 'PROTOTYPE SIMULATION';
-    const isCrossBoundary = spreadPoints.length > 0 && spreadPoints[spreadPoints.length - 1].provenanceA !== provA;
+    const isCrossBoundary = spreadPoints.length > 0 && !isSameProvenanceFamily(spreadPoints[spreadPoints.length - 1].provenanceA, provA);
 
     spreadPoints.push({
       date,

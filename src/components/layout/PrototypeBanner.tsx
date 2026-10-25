@@ -1,25 +1,29 @@
 import React from 'react';
-import { AlertTriangle, ShieldCheck, Database, ArrowRight, CheckCircle2, FileQuestion } from 'lucide-react';
-import { DataProvenance } from '../../types/market';
+import { Database, ArrowRight, ShieldCheck } from 'lucide-react';
+import { DataProvenance, DatasetMetadata, DataMode } from '../../types/market';
 
 interface PrototypeBannerProps {
   provenance: DataProvenance;
   filename?: string;
   dataQualityStatus?: 'PASS' | 'WARN';
   onNavigateToDataLab?: () => void;
+  metadata?: DatasetMetadata;
+  dataMode?: DataMode;
 }
 
 export const PrototypeBanner: React.FC<PrototypeBannerProps> = ({ 
   provenance,
   filename,
   dataQualityStatus = 'PASS',
-  onNavigateToDataLab
+  onNavigateToDataLab,
+  metadata,
+  dataMode
 }) => {
   const isOfficial = provenance === 'OFFICIAL MCX DATA — SOURCE VERIFIED';
   const isAttested = provenance === 'USER-ATTESTED SOURCE — NOT INDEPENDENTLY VERIFIED';
   const isUserImported = provenance === 'USER-IMPORTED DATA — SOURCE UNVERIFIED';
   const isSample = provenance === 'PROTOTYPE SAMPLE — UNVERIFIED SOURCING';
-  const isHybrid = provenance === 'HYBRID / MIXED PROVENANCE';
+  const isHybrid = provenance === 'HYBRID / MIXED PROVENANCE' || (dataMode === 'ALL' && (metadata?.provenanceBreakdown?.userImportedCount || 0) > 0);
 
   const badgeColor = isOfficial
     ? 'bg-emerald-600 text-white'
@@ -45,35 +49,44 @@ export const PrototypeBanner: React.FC<PrototypeBannerProps> = ({
     ? 'bg-amber-50/80 border-amber-300 text-amber-950'
     : 'bg-slate-50 border-slate-200 text-slate-800';
 
+  const sourceFilesCount = metadata?.sourceFiles?.length || 0;
+  const observationsCount = metadata?.validRows || 0;
+
+  // Build compact, auditable summary string as specified in Phase 3.C
+  let compactSummary = '';
+  if (isOfficial) {
+    compactSummary = `Official MCX · ${observationsCount.toLocaleString()} observations · Source Verified`;
+  } else if (isAttested) {
+    compactSummary = `User-Attested · ${sourceFilesCount > 1 ? `${sourceFilesCount} source files` : (filename || 'Bhavcopy CSV')} · ${observationsCount.toLocaleString()} obs · Not independently verified`;
+  } else if (isHybrid) {
+    const simCount = metadata?.provenanceBreakdown?.prototypeSimulationCount || 0;
+    const impCount = metadata?.provenanceBreakdown?.userImportedCount || 0;
+    compactSummary = `Hybrid Dataset · ${(simCount + impCount || observationsCount).toLocaleString()} observations (${simCount} sim + ${impCount} imported) · Mixed Provenance`;
+  } else if (isUserImported) {
+    compactSummary = `Imported · ${sourceFilesCount > 1 ? `${sourceFilesCount} source files` : (filename || 'Bhavcopy CSV')} · ${observationsCount.toLocaleString()} observations · Source unverified`;
+  } else if (isSample) {
+    compactSummary = `Sample Schema · ${observationsCount.toLocaleString()} observations · Unverified Sourcing`;
+  } else {
+    compactSummary = `Prototype Simulation · ${observationsCount.toLocaleString()} observations · Not live exchange execution`;
+  }
+
   return (
-    <div className={`border-b px-4 py-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs font-medium transition-colors ${containerBg}`}>
-      <div className="flex items-center gap-2 flex-wrap">
-        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded font-mono font-bold tracking-wider text-[10px] uppercase shadow-xs ${badgeColor}`}>
+    <div className={`border-b px-3 sm:px-4 py-1.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs font-medium transition-colors ${containerBg}`}>
+      <div className="flex items-center gap-2 flex-wrap min-w-0">
+        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded font-mono font-bold tracking-wider text-[10px] uppercase shadow-xs shrink-0 ${badgeColor}`}>
           <Database className="w-3 h-3" />
           {provenance}
         </span>
-        <span className="text-slate-700">
-          {isOfficial ? (
-            <span>Verified official MCX Daily Bhavcopy settlement dataset with discrete contracts (source verified).</span>
-          ) : isAttested ? (
-            <span>User-attested file: <strong className="font-mono">{filename || 'custom_bhavcopy.csv'}</strong>. User asserted source origin; NOT independently verified.</span>
-          ) : isHybrid ? (
-            <span>Hybrid dataset: discrete prototype simulation records combined with user-imported records (source unverified).</span>
-          ) : isUserImported ? (
-            <span>User-provided file: <strong className="font-mono">{filename || 'custom_bhavcopy.csv'}</strong>. Parsed and checked; official origin unverified.</span>
-          ) : isSample ? (
-            <span>Bundled illustrative sample in MCX Bhavcopy schema. Calibrated values; unverified exchange sourcing.</span>
-          ) : (
-            <span>Calibrated prototype simulation based on official MCX contract parameters.</span>
-          )}
+        <span className="text-slate-700 truncate max-w-full font-mono text-[11px]" title={filename}>
+          {compactSummary}
         </span>
       </div>
 
       <div className="flex items-center gap-3 shrink-0">
-        <div className="flex items-center gap-1.5 text-slate-700">
+        <div className="flex items-center gap-1.5 text-slate-700 text-[11px]">
           <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-          <span>Data Quality:</span>
-          <span className={`font-mono font-bold px-1.5 py-0.2 rounded text-[11px] ${
+          <span className="hidden xs:inline">Quality:</span>
+          <span className={`font-mono font-bold px-1.5 py-0.2 rounded text-[10px] ${
             dataQualityStatus === 'PASS' ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-amber-100 text-amber-800 border border-amber-300'
           }`}>
             {dataQualityStatus}
@@ -83,9 +96,10 @@ export const PrototypeBanner: React.FC<PrototypeBannerProps> = ({
         {onNavigateToDataLab && (
           <button
             onClick={onNavigateToDataLab}
-            className="text-[11px] font-mono text-slate-800 hover:text-amber-800 underline flex items-center gap-0.5 ml-1"
+            className="text-[11px] font-mono text-slate-800 hover:text-amber-800 underline flex items-center gap-0.5 ml-1 cursor-pointer"
+            title="Inspect complete source files, SHA-256 fingerprints and data records in Data Lab"
           >
-            <span>Data Lab</span>
+            <span>Data Lab Details</span>
             <ArrowRight className="w-3 h-3" />
           </button>
         )}

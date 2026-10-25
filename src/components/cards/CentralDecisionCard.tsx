@@ -182,6 +182,22 @@ export const CentralDecisionCard: React.FC<CentralDecisionCardProps> = ({
           <span>{rationale}</span>
         </div>
       </div>
+
+      {/* Institutional Methodology Distinction Note */}
+      <div className="mt-3 pt-2 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between text-[11px] text-slate-500 gap-1.5 font-sans">
+        <div>
+          <span className="font-semibold text-slate-700">Instantaneous Valuation Basis:</span> Reflects single-session observed market dislocation minus estimated transaction friction. A positive instantaneous edge does not guarantee historical mechanical strategy profitability.
+        </div>
+        {onOpenDecisionEngine && (
+          <button
+            onClick={onOpenDecisionEngine}
+            className="text-amber-800 hover:text-amber-950 font-mono font-medium underline flex items-center gap-0.5 shrink-0"
+          >
+            <span>Stress Test Friction</span>
+            <ArrowRight className="w-3 h-3" />
+          </button>
+        )}
+      </div>
     </div>
   );
 };

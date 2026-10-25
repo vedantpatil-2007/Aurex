@@ -19,6 +19,10 @@ export interface DecisionEngineInputs {
   dataSufficiency?: DataSufficiencyAssessment;
   isCalculable?: boolean;
   incalculableReason?: string;
+  hasSpreadData?: boolean;
+  isTenderWindowRestricted?: boolean;
+  tenderWindowReason?: string;
+  expiryDifferenceDays?: number;
 }
 
 /**
@@ -45,7 +49,8 @@ export function evaluateDecision(inputs: DecisionEngineInputs): DecisionResult {
     friction,
     dataSufficiency,
     isCalculable,
-    incalculableReason
+    incalculableReason,
+    hasSpreadData
   } = inputs;
 
   const expectedEdge = manualExpectedEdge !== undefined
@@ -65,9 +70,20 @@ export function evaluateDecision(inputs: DecisionEngineInputs): DecisionResult {
 
   // Gate 0: Data Sufficiency & Provenance Isolation (Prevent unsupported actionable verdicts on isolated single dates)
   const isMarketDerived = manualExpectedEdge === undefined;
+  const isMissingSpreadData = hasSpreadData === false || incalculableReason === 'Spread series is empty';
   const lacksSufficiency = isCalculable === false || (dataSufficiency && !dataSufficiency.canFormActionableVerdict);
 
-  if (isMarketDerived && lacksSufficiency) {
+  if (isMarketDerived && isMissingSpreadData) {
+    decision = 'NO TRADE';
+    rationale = `Contemporaneous market data is unavailable for contract pair ${pair[0]} / ${pair[1]} in the active dataset. A relative-value spread requires aligned settlement observations for both legs without cross-provenance contamination. Capital preserved — execution gates refuse to trade without verified basis observations.`;
+    triggerRules.push(`Data Availability Gate: No contemporaneous observations exist for ${pair[0]} / ${pair[1]} as of the selected valuation date.`);
+    triggerRules.push('Capital Preservation Rule: Reject trade execution when basis observations are missing.');
+  } else if (isMarketDerived && inputs.isTenderWindowRestricted) {
+    decision = 'NO TRADE';
+    rationale = `Physical Delivery Tender Window Restriction: ${inputs.tenderWindowReason || 'Contract is within 5 trading days of expiry'}. Under MCX compulsory delivery rules, new speculative positions are prohibited to prevent physical delivery obligations. Capital preserved.`;
+    triggerRules.push(`Tender Window Safety Gate: Physical delivery restriction active (${inputs.tenderWindowReason || 'Tender Period'}).`);
+    triggerRules.push('Capital Preservation Rule: NO TRADE enforced within tender delivery window.');
+  } else if (isMarketDerived && lacksSufficiency) {
     decision = 'NO TRADE';
     const reasonDetail = isCalculable === false
       ? (incalculableReason || 'Insufficient historical sessions (< 5 sessions) for calibrated rolling statistical baseline')
@@ -101,8 +117,14 @@ export function evaluateDecision(inputs: DecisionEngineInputs): DecisionResult {
   // 4. Actionable opportunity
   else {
     decision = 'ACTIONABLE';
-    rationale = `Observed relative-value edge survives liquidity and estimated execution friction. Dislocation of ₹${expectedEdge.toFixed(2)}/10g yields net defensible edge of +₹${netEdge.toFixed(2)}/10g with confirmed liquidity depth (${liquidityScore}/100).`;
+    const maturityClause = inputs.expiryDifferenceDays && inputs.expiryDifferenceDays > 5
+      ? ` Note: Pair carries a ${inputs.expiryDifferenceDays}-day maturity difference; spread incorporates term-structure carry and must be liquidated before earlier tender window.`
+      : '';
+    rationale = `Observed relative-value edge survives liquidity and estimated execution friction. Dislocation of ₹${expectedEdge.toFixed(2)}/10g yields net defensible edge of +₹${netEdge.toFixed(2)}/10g with confirmed liquidity depth (${liquidityScore}/100).${maturityClause}`;
     triggerRules.push(`Rule 4 Triggered: Net Edge (+₹${netEdge}/10g) > 0 and Liquidity Grade = PASS (${liquidityScore} ≥ ${friction.liquidityThresholdScore})`);
+    if (inputs.expiryDifferenceDays && inputs.expiryDifferenceDays > 5) {
+      triggerRules.push(`Maturity Limitation: ${inputs.expiryDifferenceDays}-day calendar difference introduces roll/carry basis.`);
+    }
     triggerRules.push(`Actionable Signal: Dislocation exceeds all transaction hurdles with sufficient depth.`);
   }
 

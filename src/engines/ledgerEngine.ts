@@ -64,6 +64,16 @@ export function buildEdgeSurvivalLedger(params: LedgerGenerationParams): EdgeSur
   const normA = obsA?.normalizedPrice || 0;
   const normB = obsB?.normalizedPrice || 0;
   const observedSpread = calculateSpread(normA, normB);
+  const expiryDiff = compReport.expiryDifferenceDays;
+  const isDiffMaturity = compReport.classification === 'COMPARABLE WITH MATURITY DIFFERENCE';
+
+  // Check tender window lifecycle restriction
+  const dteA = compReport.daysToExpiryA;
+  const dteB = compReport.daysToExpiryB;
+  const isTenderRestricted = (dteA > 0 && dteA <= 5) || (dteB > 0 && dteB <= 5);
+  const tenderReason = isTenderRestricted
+    ? `Contract ${dteA <= 5 ? symbolA : symbolB} is within the 5-day delivery tender window (${Math.min(dteA, dteB)}d to expiry)`
+    : undefined;
 
   // Evaluate Decision Engine with strictly aligned inputs & data sufficiency
   const decisionResult = evaluateDecision({
@@ -77,7 +87,10 @@ export function buildEdgeSurvivalLedger(params: LedgerGenerationParams): EdgeSur
     friction,
     dataSufficiency,
     isCalculable,
-    incalculableReason
+    incalculableReason,
+    isTenderWindowRestricted: isTenderRestricted,
+    tenderWindowReason: tenderReason,
+    expiryDifferenceDays: expiryDiff
   });
 
   const stages: LedgerStageData[] = [];
@@ -164,8 +177,6 @@ export function buildEdgeSurvivalLedger(params: LedgerGenerationParams): EdgeSur
   });
 
   // STAGE 4: EXPIRY AND DATA CHECK
-  const expiryDiff = compReport.expiryDifferenceDays;
-  const isDiffMaturity = compReport.classification === 'COMPARABLE WITH MATURITY DIFFERENCE';
   stages.push({
     stageNumber: 4,
     stageName: 'EXPIRY AND DATA CHECK',
@@ -261,6 +272,10 @@ export function buildEdgeSurvivalLedger(params: LedgerGenerationParams): EdgeSur
   });
 
   // STAGE 8: FINAL DECISION
+  const maturityMetric = isDiffMaturity
+    ? [{ label: 'Maturity Limitation', value: `${expiryDiff}-day difference`, note: 'Spread includes calendar carry; liquidate before earlier tender window' }]
+    : [];
+
   stages.push({
     stageNumber: 8,
     stageName: 'FINAL DECISION',
@@ -269,10 +284,13 @@ export function buildEdgeSurvivalLedger(params: LedgerGenerationParams): EdgeSur
     metrics: [
       { label: 'Final Gate Verdict', value: decisionResult.decision },
       { label: 'Active Rules Triggered', value: `${decisionResult.triggerRules.length} rules` },
-      { label: 'Recommendation', value: decisionResult.decision === 'ACTIONABLE' ? 'Execute pair spread' : decisionResult.decision === 'WATCH' ? 'Monitor liquidity & depth' : 'Preserve capital (NO TRADE)' }
+      { label: 'Recommendation', value: decisionResult.decision === 'ACTIONABLE' ? 'Execute pair spread' : decisionResult.decision === 'WATCH' ? 'Monitor liquidity & depth' : 'Preserve capital (NO TRADE)' },
+      ...maturityMetric
     ],
     explanation: decisionResult.rationale,
-    auditTrail: decisionResult.triggerRules
+    auditTrail: isDiffMaturity
+      ? [...decisionResult.triggerRules, `Maturity Safety Limitation: Unwind prior to ${obsA && obsB && obsA.expiryDate < obsB.expiryDate ? symbolA : symbolB} tender window.`]
+      : decisionResult.triggerRules
   });
 
   return {

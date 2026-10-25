@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Sidebar, NavigationPage } from './components/layout/Sidebar';
 import { Header } from './components/layout/Header';
 import { PrototypeBanner } from './components/layout/PrototypeBanner';
 import { JudgeTourStepper, JUDGE_STEPS } from './components/guide/JudgeTourStepper';
 import { marketDataService } from './services/marketDataService';
 import { validateMarketData } from './utils/dataQuality';
-import { buildPairSpreadSeries, calculateZScore } from './engines/relativeValueEngine';
+import { buildPairSpreadSeries, calculateZScore, getContemporaneousPairSpread } from './engines/relativeValueEngine';
 import { evaluateDecision } from './engines/decisionEngine';
 import {
   ContractSymbol,
@@ -82,6 +82,10 @@ export function App() {
   const handleSelectDataMode = (mode: DataMode) => {
     marketDataService.setActiveDataMode(mode);
     setDataMode(mode);
+    const modeDates = marketDataService.getAvailableDates(mode);
+    if (modeDates.length > 0) {
+      setSelectedDate(modeDates[modeDates.length - 1]);
+    }
   };
 
   useEffect(() => {
@@ -109,12 +113,24 @@ export function App() {
     return availableDates.slice(-1)[0] || '2026-10-08';
   });
 
-  // Ensure selectedDate updates if active dataset changes and does not contain it
+  const prevModeRef = useRef<DataMode>(dataMode);
+  const prevDatesLengthRef = useRef<number>(availableDates.length);
+
+  // Automatically synchronize selectedDate when dataset mode changes or new records are imported
   useEffect(() => {
-    if (availableDates.length > 0 && !availableDates.includes(selectedDate)) {
+    if (prevModeRef.current !== dataMode) {
+      prevModeRef.current = dataMode;
+      const modeDates = marketDataService.getAvailableDates(dataMode);
+      if (modeDates.length > 0) {
+        setSelectedDate(modeDates[modeDates.length - 1]);
+      }
+    } else if (availableDates.length > prevDatesLengthRef.current) {
+      setSelectedDate(availableDates[availableDates.length - 1]);
+    } else if (availableDates.length > 0 && !availableDates.includes(selectedDate)) {
       setSelectedDate(availableDates[availableDates.length - 1]);
     }
-  }, [availableDates, selectedDate]);
+    prevDatesLengthRef.current = availableDates.length;
+  }, [dataMode, availableDates, selectedDate]);
 
   // As-Of observations strictly quarantined through selectedDate to prevent look-ahead bias
   const asOfNormalizedObservations = useMemo(() => {
@@ -226,11 +242,25 @@ export function App() {
     return buildPairSpreadSeries(seriesA, seriesB, selectedPair[0], selectedPair[1]);
   }, [seriesA, seriesB, selectedPair]);
 
-  // Current Spread observed As-Of selectedDate
+  // Active Pair contemporaneous valuation evaluated strictly on selectedDate
+  const contemporaneousSpread = useMemo(() => {
+    return getContemporaneousPairSpread(
+      asOfNormalizedObservations,
+      selectedPair[0],
+      selectedPair[1],
+      selectedDate
+    );
+  }, [asOfNormalizedObservations, selectedPair, selectedDate]);
+
+  // Current Spread observed As-Of selectedDate:
+  // If contemporaneous on selectedDate, use contemporaneousSpread.spread; otherwise fall back to latest historical pair spread in the series if any
   const latestPairSpread = useMemo(() => {
+    if (contemporaneousSpread.isContemporaneous) {
+      return contemporaneousSpread.spread;
+    }
     if (pairSpreadSeries.length === 0) return 0;
     return pairSpreadSeries[pairSpreadSeries.length - 1].spread;
-  }, [pairSpreadSeries]);
+  }, [contemporaneousSpread, pairSpreadSeries]);
 
   // Statistical dispersion with strict provenance isolation
   const zScoreAnalysis = useMemo(() => {
@@ -241,6 +271,15 @@ export function App() {
   const decisionResult = useMemo(() => {
     const latestA = asOfLatestObservations[selectedPair[0]];
     const latestB = asOfLatestObservations[selectedPair[1]];
+    const hasActiveSpread = contemporaneousSpread.isContemporaneous;
+
+    const dteA = contemporaneousSpread.obsA?.daysToExpiry ?? latestA?.daysToExpiry;
+    const dteB = contemporaneousSpread.obsB?.daysToExpiry ?? latestB?.daysToExpiry;
+    const isTenderRestricted = (dteA !== undefined && dteA > 0 && dteA <= 5) || (dteB !== undefined && dteB > 0 && dteB <= 5);
+    const tenderReason = isTenderRestricted
+      ? `Contract ${dteA !== undefined && dteA <= 5 ? selectedPair[0] : selectedPair[1]} is within the 5-day delivery tender window`
+      : undefined;
+    const expiryDiff = (dteA !== undefined && dteB !== undefined) ? Math.abs(dteA - dteB) : undefined;
 
     return evaluateDecision({
       pair: selectedPair,
@@ -252,8 +291,14 @@ export function App() {
       oiB: latestB?.openInterest || 0,
       friction,
       dataSufficiency,
-      isCalculable: zScoreAnalysis.isCalculable,
-      incalculableReason: zScoreAnalysis.incalculableReason
+      isCalculable: hasActiveSpread && zScoreAnalysis.isCalculable,
+      incalculableReason: !hasActiveSpread
+        ? (contemporaneousSpread.reason || `No contemporaneous observations exist for ${selectedPair[0]} / ${selectedPair[1]} on ${selectedDate}`)
+        : zScoreAnalysis.incalculableReason,
+      hasSpreadData: hasActiveSpread,
+      isTenderWindowRestricted: isTenderRestricted,
+      tenderWindowReason: tenderReason,
+      expiryDifferenceDays: expiryDiff
     });
   }, [
     selectedPair,
@@ -263,7 +308,9 @@ export function App() {
     friction,
     dataSufficiency,
     zScoreAnalysis.isCalculable,
-    zScoreAnalysis.incalculableReason
+    zScoreAnalysis.incalculableReason,
+    contemporaneousSpread,
+    selectedDate
   ]);
 
   return (
@@ -311,6 +358,8 @@ export function App() {
           filename={datasetMetadata.filename}
           dataQualityStatus={dataQualityReport.status}
           onNavigateToDataLab={() => handleNavigate('data-lab')}
+          metadata={datasetMetadata}
+          dataMode={dataMode}
         />
 
         {/* Dynamic Route Screen */}
@@ -411,6 +460,19 @@ export function App() {
               calculatedSpread={latestPairSpread}
               latestData={asOfLatestObservations}
               onNavigate={handleNavigate}
+              dataMode={dataMode}
+              onSelectDataMode={handleSelectDataMode}
+              selectedDate={selectedDate}
+              availableDates={availableDates}
+              latestAvailableDate={latestAvailableDate}
+              onSelectDate={setSelectedDate}
+              provenance={provenance}
+              metadata={datasetMetadata}
+              hasSpreadData={contemporaneousSpread.isContemporaneous}
+              missingSpreadReason={contemporaneousSpread.reason}
+              spreadSeriesLength={pairSpreadSeries.length}
+              priceA={contemporaneousSpread.priceA}
+              priceB={contemporaneousSpread.priceB}
             />
           )}
         </main>

@@ -228,9 +228,9 @@ export const Validation: React.FC<ValidationPageProps> = ({
           />
 
           <MetricCard
-            label="Realized Net Edge"
+            label="Mean Out-of-Sample Net Edge"
             value={windows.length > 0 ? formatINR(avgNetEdge) : 'N/A'}
-            subtitle={windows.length > 0 ? 'Theoretical edge surviving friction' : 'Insufficient historical data for out-of-sample test'}
+            subtitle={windows.length > 0 ? 'Statistical edge surviving friction across test slices' : 'Insufficient historical data for out-of-sample test'}
             badge={
               <span className={`text-[11px] font-mono font-bold px-2 py-0.5 rounded ${
                 windows.length === 0
