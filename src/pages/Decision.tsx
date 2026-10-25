@@ -33,6 +33,8 @@ interface DecisionPageProps {
   onFrictionChange: (updated: FrictionAssumptions) => void;
   manualEdge: number | undefined;
   onManualEdgeChange: (val: number | undefined) => void;
+  simulatedLiquidityScore?: number;
+  onSimulatedLiquidityScoreChange?: (val: number | undefined) => void;
   calculatedSpread: number;
   latestData?: Record<ContractSymbol, NormalizedObservation>;
   onNavigate: (page: any) => void;
@@ -59,6 +61,8 @@ export const Decision: React.FC<DecisionPageProps> = ({
   onFrictionChange,
   manualEdge,
   onManualEdgeChange,
+  simulatedLiquidityScore,
+  onSimulatedLiquidityScoreChange,
   calculatedSpread,
   latestData,
   onNavigate,
@@ -80,6 +84,7 @@ export const Decision: React.FC<DecisionPageProps> = ({
   const loadScenarioActionable = () => {
     onPairChange(['GOLDM', 'GOLDTEN']);
     onManualEdgeChange(175); // Strong edge
+    onSimulatedLiquidityScoreChange?.(undefined); // Clear simulated liquidity override
     onFrictionChange({
       slippagePer10g: 20,
       brokerageTaxesPer10g: 30,
@@ -91,7 +96,8 @@ export const Decision: React.FC<DecisionPageProps> = ({
 
   const loadScenarioNoTradeCost = () => {
     onPairChange(['GOLDM', 'GOLDTEN']);
-    onManualEdgeChange(50); // Small edge
+    onManualEdgeChange(50); // Small edge (consumed by friction)
+    onSimulatedLiquidityScoreChange?.(undefined); // Clear simulated liquidity override
     onFrictionChange({
       slippagePer10g: 35,
       brokerageTaxesPer10g: 35,
@@ -102,19 +108,21 @@ export const Decision: React.FC<DecisionPageProps> = ({
   };
 
   const loadScenarioWatch = () => {
-    onPairChange(['GOLDM', 'GOLDGUINEA']);
-    onManualEdgeChange(135); // Edge exists
+    onPairChange(['GOLDM', 'GOLDTEN']);
+    onManualEdgeChange(135); // Edge exists (₹135 > friction ₹82 -> +₹53 net edge)
+    onSimulatedLiquidityScoreChange?.(35); // Borderline liquidity: 35/100 (Threshold 40)
     onFrictionChange({
       slippagePer10g: 22,
       brokerageTaxesPer10g: 30,
       liquidityHaircutPer10g: 15,
       costBufferPer10g: 15,
-      liquidityThresholdScore: 40 // Borderline liquidity threshold for GUINEA
+      liquidityThresholdScore: 40 // Borderline threshold
     });
   };
 
-  const resetToLiveMarket = () => {
+  const clearOverridesAndRestoreDataset = () => {
     onManualEdgeChange(undefined);
+    onSimulatedLiquidityScoreChange?.(undefined);
     onFrictionChange({
       slippagePer10g: 25,
       brokerageTaxesPer10g: 35,
@@ -423,29 +431,33 @@ export const Decision: React.FC<DecisionPageProps> = ({
             Preset 3: No Trade (Hurdle Fails)
           </button>
           <button
-            onClick={resetToLiveMarket}
+            onClick={clearOverridesAndRestoreDataset}
             className="px-2.5 py-1 text-xs font-semibold rounded bg-amber-500 hover:bg-amber-400 text-slate-950 transition-colors font-mono font-bold"
-            title="Reset manual overrides and evaluate live market spread"
+            title="Clear manual overrides and evaluate selected dataset spread"
           >
-            Reset to Live Market
+            Clear Override & Restore Selected Dataset
           </button>
         </div>
       </div>
 
       {/* Sandbox Notice Banner */}
-      {manualEdge !== undefined && (
+      {(manualEdge !== undefined || simulatedLiquidityScore !== undefined) && (
         <div className="bg-amber-50 border border-amber-300 rounded-xl p-3 flex flex-wrap items-center justify-between gap-2 text-xs text-amber-950">
           <div className="flex items-center gap-2">
             <span className="font-mono font-bold uppercase px-2 py-0.5 rounded bg-amber-200 text-amber-900 text-[10px]">
               What-If Sandbox Active
             </span>
-            <span>Manual Expected Edge override of ₹{manualEdge.toFixed(2)}/10g is active. Live market spread is ₹{calculatedSpread.toFixed(2)}/10g.</span>
+            <span>
+              {manualEdge !== undefined && `Manual Expected Edge: ₹${manualEdge.toFixed(2)}/10g. `}
+              {simulatedLiquidityScore !== undefined && `Simulated Liquidity Score: ${simulatedLiquidityScore}/100 (Borderline Scenario). `}
+              Selected dataset observed spread is ₹{calculatedSpread.toFixed(2)}/10g.
+            </span>
           </div>
           <button
-            onClick={resetToLiveMarket}
+            onClick={clearOverridesAndRestoreDataset}
             className="font-mono font-bold underline text-amber-900 hover:text-amber-950 text-xs ml-auto"
           >
-            Clear Override & Restore Live Spread
+            Clear Override & Restore Selected Dataset
           </button>
         </div>
       )}
@@ -461,6 +473,7 @@ export const Decision: React.FC<DecisionPageProps> = ({
         pair={selectedPair}
         observedSpread={calculatedSpread}
         manualExpectedEdge={manualEdge}
+        simulatedLiquidityScore={simulatedLiquidityScore}
         volA={latestData?.[selectedPair[0]]?.volume ?? 0}
         oiA={latestData?.[selectedPair[0]]?.openInterest ?? 0}
         volB={latestData?.[selectedPair[1]]?.volume ?? 0}

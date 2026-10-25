@@ -22,6 +22,7 @@ interface StressLabSensitivityGridProps {
   pair: [ContractSymbol, ContractSymbol];
   observedSpread: number;
   manualExpectedEdge?: number;
+  simulatedLiquidityScore?: number;
   volA: number;
   oiA: number;
   volB: number;
@@ -34,6 +35,7 @@ export const StressLabSensitivityGrid: React.FC<StressLabSensitivityGridProps> =
   pair,
   observedSpread,
   manualExpectedEdge,
+  simulatedLiquidityScore,
   volA,
   oiA,
   volB,
@@ -55,6 +57,7 @@ export const StressLabSensitivityGrid: React.FC<StressLabSensitivityGridProps> =
       pair,
       observedSpread,
       manualExpectedEdge,
+      simulatedLiquidityScore,
       volA,
       oiA,
       volB,
@@ -67,6 +70,7 @@ export const StressLabSensitivityGrid: React.FC<StressLabSensitivityGridProps> =
       pair,
       observedSpread,
       manualExpectedEdge,
+      simulatedLiquidityScore,
       volA,
       oiA,
       volB,
@@ -86,6 +90,7 @@ export const StressLabSensitivityGrid: React.FC<StressLabSensitivityGridProps> =
       pair,
       observedSpread,
       manualExpectedEdge,
+      simulatedLiquidityScore,
       volA,
       oiA,
       volB,

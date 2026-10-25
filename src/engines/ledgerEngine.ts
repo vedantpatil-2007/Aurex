@@ -23,6 +23,7 @@ export interface LedgerGenerationParams {
   historicalStdDev?: number;
   zScore?: number;
   manualEdgeOverride?: number;
+  simulatedLiquidityScore?: number;
   dataSufficiency?: DataSufficiencyAssessment;
   isCalculable?: boolean;
   incalculableReason?: string;
@@ -80,6 +81,7 @@ export function buildEdgeSurvivalLedger(params: LedgerGenerationParams): EdgeSur
     pair,
     observedSpread,
     manualExpectedEdge: manualEdgeOverride,
+    simulatedLiquidityScore: params.simulatedLiquidityScore,
     volA: obsA?.volume || 0,
     oiA: obsA?.openInterest || 0,
     volB: obsB?.volume || 0,
@@ -90,7 +92,8 @@ export function buildEdgeSurvivalLedger(params: LedgerGenerationParams): EdgeSur
     incalculableReason,
     isTenderWindowRestricted: isTenderRestricted,
     tenderWindowReason: tenderReason,
-    expiryDifferenceDays: expiryDiff
+    expiryDifferenceDays: expiryDiff,
+    isUnverifiedSource: provenance.includes('UNVERIFIED')
   });
 
   const stages: LedgerStageData[] = [];

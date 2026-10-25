@@ -93,13 +93,15 @@ export function getContemporaneousPairSpread(
   let obsB: NormalizedObservation | undefined;
 
   if (aImported.length > 0 && bImported.length > 0) {
-    obsA = selectActiveObservation(aImported);
-    obsB = selectActiveObservation(bImported);
+    const matched = selectMatchedPairObservations(aImported, bImported);
+    obsA = matched?.obsA;
+    obsB = matched?.obsB;
   } else if (aImported.length === 0 && bImported.length === 0) {
     const aProto = onDateA.filter(o => isPrototypeProvenance(o.provenance));
     const bProto = onDateB.filter(o => isPrototypeProvenance(o.provenance));
-    obsA = selectActiveObservation(aProto);
-    obsB = selectActiveObservation(bProto);
+    const matched = selectMatchedPairObservations(aProto, bProto);
+    obsA = matched?.obsA;
+    obsB = matched?.obsB;
   } else {
     const importedLeg = aImported.length > 0 ? symbolA : symbolB;
     const protoLeg = aImported.length > 0 ? symbolB : symbolA;
@@ -168,6 +170,88 @@ export function selectActiveObservation(observations: NormalizedObservation[]): 
 
   const sorted = [...observations].sort((a, b) => a.expiryDate.localeCompare(b.expiryDate));
   return sorted[0];
+}
+
+/**
+ * Selects the optimal contemporaneous observation pair for Leg A and Leg B on a specific date.
+ * Enforces matching contract maturity cycles (|expiryDifferenceDays| <= 15) to prevent
+ * artificial calendar carry jumps and uncoordinated contract roll spikes.
+ * Applies hysteresis to maintain contract continuity and prevent single-day whipsaw rolls.
+ */
+export function selectMatchedPairObservations(
+  candidatesA: NormalizedObservation[],
+  candidatesB: NormalizedObservation[],
+  prevCycle?: { expiryA: string; expiryB: string }
+): { obsA: NormalizedObservation; obsB: NormalizedObservation } | undefined {
+  if (!candidatesA || candidatesA.length === 0 || !candidatesB || candidatesB.length === 0) {
+    return undefined;
+  }
+  if (candidatesA.length === 1 && candidatesB.length === 1) {
+    return { obsA: candidatesA[0], obsB: candidatesB[0] };
+  }
+
+  interface CandidatePair {
+    a: NormalizedObservation;
+    b: NormalizedObservation;
+    diffDays: number;
+    minVol: number;
+    totalVol: number;
+    minDte: number;
+  }
+
+  const matchedPairs: CandidatePair[] = [];
+  for (const a of candidatesA) {
+    for (const b of candidatesB) {
+      const diffMs = Math.abs(new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime());
+      const diffDays = Math.round(diffMs / (1000 * 3600 * 24));
+      // Same cycle condition: expiries differ by at most 15 calendar days
+      if (diffDays <= 15) {
+        matchedPairs.push({
+          a,
+          b,
+          diffDays,
+          minVol: Math.min(a.volume || 0, b.volume || 0),
+          totalVol: (a.volume || 0) + (b.volume || 0),
+          minDte: Math.min(a.daysToExpiry ?? 999, b.daysToExpiry ?? 999)
+        });
+      }
+    }
+  }
+
+  if (matchedPairs.length > 0) {
+    matchedPairs.sort((p1, p2) => {
+      // 1. Prioritize cycles outside the 5-day physical delivery tender window
+      const p1InTender = p1.minDte <= 5;
+      const p2InTender = p2.minDte <= 5;
+      if (p1InTender !== p2InTender) return p1InTender ? 1 : -1;
+
+      // 2. Roll hysteresis: if p1 matches the prior active cycle and has >= 70% of candidate's volume,
+      // maintain continuity to avoid single-day whipsaws
+      if (prevCycle) {
+        const p1IsPrev = p1.a.expiryDate === prevCycle.expiryA && p1.b.expiryDate === prevCycle.expiryB;
+        const p2IsPrev = p2.a.expiryDate === prevCycle.expiryA && p2.b.expiryDate === prevCycle.expiryB;
+        if (p1IsPrev && !p2IsPrev && p1.minVol >= p2.minVol * 0.7) return -1;
+        if (p2IsPrev && !p1IsPrev && p2.minVol >= p1.minVol * 0.7) return 1;
+      }
+
+      // 3. Execution liquidity capacity: bottleneck leg volume descending
+      if (p2.minVol !== p1.minVol) return p2.minVol - p1.minVol;
+      // 4. Total volume descending
+      if (p2.totalVol !== p1.totalVol) return p2.totalVol - p1.totalVol;
+      // 5. Earliest active expiry
+      return p1.a.expiryDate.localeCompare(p2.a.expiryDate);
+    });
+
+    return { obsA: matchedPairs[0].a, obsB: matchedPairs[0].b };
+  }
+
+  // Graceful fallback if no cycle is within 15 calendar days
+  const fallbackA = selectActiveObservation(candidatesA);
+  const fallbackB = selectActiveObservation(candidatesB);
+  if (fallbackA && fallbackB) {
+    return { obsA: fallbackA, obsB: fallbackB };
+  }
+  return undefined;
 }
 
 /**
@@ -261,6 +345,7 @@ export function buildPairSpreadSeries(
     .sort((a, b) => a.localeCompare(b));
 
   const spreadPoints: RelativeValueSpreadPoint[] = [];
+  let prevCycle: { expiryA: string; expiryB: string } | undefined = undefined;
 
   for (const date of commonDates) {
     const aList = aDateGroups.get(date)!;
@@ -273,23 +358,21 @@ export function buildPairSpreadSeries(
     const aImported = aList.filter(o => o.provenance !== 'PROTOTYPE SIMULATION');
     const bImported = bList.filter(o => o.provenance !== 'PROTOTYPE SIMULATION');
 
-    let obsA: NormalizedObservation | undefined;
-    let obsB: NormalizedObservation | undefined;
+    let matched: { obsA: NormalizedObservation; obsB: NormalizedObservation } | undefined;
 
     if (aImported.length > 0 && bImported.length > 0) {
-      obsA = selectActiveObservation(aImported);
-      obsB = selectActiveObservation(bImported);
+      matched = selectMatchedPairObservations(aImported, bImported, prevCycle);
     } else if (aImported.length === 0 && bImported.length === 0) {
       const aProto = aList.filter(o => o.provenance === 'PROTOTYPE SIMULATION');
       const bProto = bList.filter(o => o.provenance === 'PROTOTYPE SIMULATION');
-      obsA = selectActiveObservation(aProto);
-      obsB = selectActiveObservation(bProto);
+      matched = selectMatchedPairObservations(aProto, bProto, prevCycle);
     } else {
       // One leg is imported while the other is missing/prototype; skip date to prevent cross-provenance contamination
       continue;
     }
 
-    if (!obsA || !obsB) continue;
+    if (!matched) continue;
+    const { obsA, obsB } = matched;
     if (!isSameProvenanceFamily(obsA.provenance, obsB.provenance)) continue;
 
     const spread = calculateSpread(obsA.normalizedPrice, obsB.normalizedPrice);
@@ -298,6 +381,12 @@ export function buildPairSpreadSeries(
     const provA = obsA.provenance || 'PROTOTYPE SIMULATION';
     const provB = obsB.provenance || 'PROTOTYPE SIMULATION';
     const isCrossBoundary = spreadPoints.length > 0 && !isSameProvenanceFamily(spreadPoints[spreadPoints.length - 1].provenanceA, provA);
+    const isRollBoundary = prevCycle !== undefined &&
+      (prevCycle.expiryA !== obsA.expiryDate || prevCycle.expiryB !== obsB.expiryDate);
+    const diffMs = Math.abs(new Date(obsA.expiryDate).getTime() - new Date(obsB.expiryDate).getTime());
+    const maturityDiffDays = Math.round(diffMs / (1000 * 3600 * 24));
+
+    prevCycle = { expiryA: obsA.expiryDate, expiryB: obsB.expiryDate };
 
     spreadPoints.push({
       date,
@@ -311,7 +400,9 @@ export function buildPairSpreadSeries(
       spreadPercentage,
       provenanceA: provA,
       provenanceB: provB,
-      isCrossProvenanceBoundary: isCrossBoundary
+      isCrossProvenanceBoundary: isCrossBoundary,
+      isRollBoundary,
+      maturityDifferenceDays: maturityDiffDays
     });
   }
 
@@ -363,21 +454,26 @@ export function calculateZScore(
   let incalculableReason: string | undefined = undefined;
   let statisticalStatus: StatisticalStatus = 'CALCULABLE';
 
+  // Trailing rolling window slice for dynamic 10D / 20D / 30D statistical calibration
+  const windowSlice = eligibleSpreads.slice(-rollingWindow);
+
   if (eligibleSpreads.length < 5) {
     isCalculable = false;
     statisticalStatus = 'INSUFFICIENT_HISTORY';
     incalculableReason = targetProv === 'PROTOTYPE SIMULATION'
       ? 'Insufficient history (< 5 sessions for calibrated rolling statistics)'
       : `Insufficient single-provenance history (${eligibleSpreads.length} session${eligibleSpreads.length === 1 ? '' : 's'} available, minimum 5 required for calibrated rolling statistics). Statistical calibration cannot cross provenance boundary into prototype simulation.`;
+  } else if (windowSlice.length < 5) {
+    isCalculable = false;
+    statisticalStatus = 'INSUFFICIENT_HISTORY';
+    incalculableReason = `Insufficient history for ${rollingWindow}D rolling window (${windowSlice.length} sessions available, minimum 5 required).`;
   }
-
-  // Calculate isolated baseline statistics
-  const sum = eligibleSpreads.reduce((acc, v) => acc + v, 0);
-  const mean = eligibleSpreads.length > 0 ? sum / eligibleSpreads.length : 0;
+  const sum = windowSlice.reduce((acc, v) => acc + v, 0);
+  const mean = windowSlice.length > 0 ? sum / windowSlice.length : 0;
 
   let variance = 0;
-  if (eligibleSpreads.length >= 2) {
-    variance = eligibleSpreads.reduce((acc, v) => acc + Math.pow(v - mean, 2), 0) / eligibleSpreads.length;
+  if (windowSlice.length >= 2) {
+    variance = windowSlice.reduce((acc, v) => acc + Math.pow(v - mean, 2), 0) / windowSlice.length;
   }
   const standardDeviation = Math.sqrt(variance);
 
@@ -387,8 +483,8 @@ export function calculateZScore(
     incalculableReason = 'Zero spread dispersion (σ = 0)';
   }
 
-  const minSpread = eligibleSpreads.length > 0 ? Math.min(...eligibleSpreads) : 0;
-  const maxSpread = eligibleSpreads.length > 0 ? Math.max(...eligibleSpreads) : 0;
+  const minSpread = windowSlice.length > 0 ? Math.min(...windowSlice) : 0;
+  const maxSpread = windowSlice.length > 0 ? Math.max(...windowSlice) : 0;
 
   // Calculate rolling statistics for each point in series, segmented by provenance
   const enrichedSeries: RelativeValueSpreadPoint[] = spreadPoints.map((point, index) => {
@@ -398,9 +494,9 @@ export function calculateZScore(
       .slice(0, index + 1)
       .filter(p => (p.provenanceA || 'PROTOTYPE SIMULATION') === ptProv);
 
-    const windowSlice = singleProvHistory.slice(-rollingWindow).map(p => p.spread);
+    const pointWindowSlice = singleProvHistory.slice(-rollingWindow).map(p => p.spread);
 
-    if (windowSlice.length < 5) {
+    if (pointWindowSlice.length < 5) {
       return {
         ...point,
         zScore: undefined,
@@ -409,14 +505,14 @@ export function calculateZScore(
       };
     }
 
-    const wSum = windowSlice.reduce((acc, v) => acc + v, 0);
-    const wMean = wSum / windowSlice.length;
+    const wSum = pointWindowSlice.reduce((acc, v) => acc + v, 0);
+    const wMean = wSum / pointWindowSlice.length;
 
     let wVariance = 0;
-    for (const val of windowSlice) {
+    for (const val of pointWindowSlice) {
       wVariance += Math.pow(val - wMean, 2);
     }
-    const wStdDev = Math.sqrt(wVariance / windowSlice.length);
+    const wStdDev = Math.sqrt(wVariance / pointWindowSlice.length);
 
     let zScore: number | undefined = undefined;
     if (wStdDev > 0.0001) {
@@ -449,7 +545,7 @@ export function calculateZScore(
     incalculableReason,
     statisticalStatus,
     rollingWindowDays: rollingWindow,
-    calibrationObservationCount: eligibleSpreads.length,
+    calibrationObservationCount: windowSlice.length,
     calibrationProvenance: targetProv
   };
 }

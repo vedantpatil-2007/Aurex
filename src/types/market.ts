@@ -95,6 +95,8 @@ export interface RelativeValueSpreadPoint {
   provenanceA?: DataProvenance;
   provenanceB?: DataProvenance;
   isCrossProvenanceBoundary?: boolean;
+  isRollBoundary?: boolean;
+  maturityDifferenceDays?: number;
 }
 
 export type StatisticalStatus =

@@ -79,18 +79,29 @@ export const SpreadTimeSeriesChart: React.FC<SpreadTimeSeriesChartProps> = ({
                     const data = payload[0].payload as RelativeValueSpreadPoint;
                     return (
                       <div className="bg-slate-900 text-white p-3 rounded-lg shadow-xl text-xs border border-slate-800 font-mono">
-                        <div className="font-bold text-amber-400 border-b border-slate-800 pb-1 mb-1.5">
-                          {label}
+                        <div className="font-bold text-amber-400 border-b border-slate-800 pb-1 mb-1.5 flex items-center justify-between gap-2">
+                          <span>{label}</span>
+                          {data.isRollBoundary && (
+                            <span className="text-[9px] bg-amber-500/20 text-amber-300 border border-amber-500/40 px-1.5 py-0.2 rounded font-semibold uppercase">
+                              Roll Boundary
+                            </span>
+                          )}
                         </div>
                         <div className="space-y-1">
                           <div className="flex justify-between gap-4">
                             <span className="text-slate-400">{pair[0]} Norm:</span>
-                            <span className="font-bold">{formatINR(data.priceA)}</span>
+                            <span className="font-bold">{formatINR(data.priceA)} {data.expiryA ? `(${data.expiryA})` : ''}</span>
                           </div>
                           <div className="flex justify-between gap-4">
                             <span className="text-slate-400">{pair[1]} Norm:</span>
-                            <span className="font-bold">{formatINR(data.priceB)}</span>
+                            <span className="font-bold">{formatINR(data.priceB)} {data.expiryB ? `(${data.expiryB})` : ''}</span>
                           </div>
+                          {data.maturityDifferenceDays !== undefined && (
+                            <div className="flex justify-between gap-4 text-[10px] text-slate-400">
+                              <span>Maturity Difference:</span>
+                              <span>{data.maturityDifferenceDays} calendar days</span>
+                            </div>
+                          )}
                           <div className="flex justify-between gap-4 pt-1 border-t border-slate-800 text-amber-400 font-bold">
                             <span>Spread (S_t):</span>
                             <span>{formatINR(data.spread)} ({data.spreadPercentage > 0 ? '+' : ''}{data.spreadPercentage}%)</span>

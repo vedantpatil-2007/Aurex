@@ -11,6 +11,7 @@ export interface DecisionEngineInputs {
   pair: [ContractSymbol, ContractSymbol];
   observedSpread: number;         // Current spread (₹ / 10g)
   manualExpectedEdge?: number;    // Optional manual demonstration override
+  simulatedLiquidityScore?: number; // Optional simulated demonstration override for presets
   volA: number;
   oiA: number;
   volB: number;
@@ -23,6 +24,7 @@ export interface DecisionEngineInputs {
   isTenderWindowRestricted?: boolean;
   tenderWindowReason?: string;
   expiryDifferenceDays?: number;
+  isUnverifiedSource?: boolean;
 }
 
 /**
@@ -61,7 +63,11 @@ export function evaluateDecision(inputs: DecisionEngineInputs): DecisionResult {
   const totalFriction = waterfall.totalFriction;
   const netEdge = waterfall.netDefensibleEdge;
 
-  const liquidityScore = calculateLiquidityScore(volA, oiA, volB, oiB);
+  const measuredLiquidityScore = calculateLiquidityScore(volA, oiA, volB, oiB);
+  const isSimulatedLiquidity = inputs.simulatedLiquidityScore !== undefined;
+  const liquidityScore = isSimulatedLiquidity
+    ? inputs.simulatedLiquidityScore!
+    : measuredLiquidityScore;
   const liquidityGrade = evaluateLiquidityGrade(liquidityScore, friction.liquidityThresholdScore);
 
   let decision: DecisionState;
@@ -69,7 +75,7 @@ export function evaluateDecision(inputs: DecisionEngineInputs): DecisionResult {
   const triggerRules: string[] = [];
 
   // Gate 0: Data Sufficiency & Provenance Isolation (Prevent unsupported actionable verdicts on isolated single dates)
-  const isMarketDerived = manualExpectedEdge === undefined;
+  const isMarketDerived = manualExpectedEdge === undefined && !isSimulatedLiquidity;
   const isMissingSpreadData = hasSpreadData === false || incalculableReason === 'Spread series is empty';
   const lacksSufficiency = isCalculable === false || (dataSufficiency && !dataSufficiency.canFormActionableVerdict);
 
@@ -97,6 +103,9 @@ export function evaluateDecision(inputs: DecisionEngineInputs): DecisionResult {
     decision = 'NO TRADE';
     rationale = `Theoretical opportunity does not survive execution screening: Liquidity score (${liquidityScore}/100) failed minimum execution threshold (${friction.liquidityThresholdScore}). Order book depth is insufficient to execute without severe adverse market impact.`;
     triggerRules.push(`Rule 1 Triggered: Liquidity Grade = FAIL (${liquidityScore} < ${Math.round(friction.liquidityThresholdScore * 0.75)})`);
+    if (isSimulatedLiquidity) {
+      triggerRules.push(`Simulation Sandbox: Evaluated with simulated liquidity score ${liquidityScore}/100 (Measured market depth: ${measuredLiquidityScore}/100).`);
+    }
     triggerRules.push(`Capital Preservation Rule: NO TRADE is a valid risk management outcome to prevent illiquid trapped positions.`);
   }
   // 2. Cost friction check (Honest validation rule)
@@ -110,22 +119,40 @@ export function evaluateDecision(inputs: DecisionEngineInputs): DecisionResult {
   // 3. Borderline liquidity check (Watchlist / pending confirmation)
   else if (liquidityGrade === 'BORDERLINE') {
     decision = 'WATCH';
-    rationale = `Relative-value anomaly detected (+₹${netEdge.toFixed(2)}/10g net edge), but liquidity is near the configured threshold (${liquidityScore}/100 vs ${friction.liquidityThresholdScore}). Stage for execution but monitor spread stability and depth.`;
+    const simTag = isSimulatedLiquidity ? ' [Simulated Preset Scenario]' : '';
+    rationale = `Relative-value anomaly detected (+₹${netEdge.toFixed(2)}/10g net edge), but liquidity is near the configured threshold (${liquidityScore}/100 vs ${friction.liquidityThresholdScore})${simTag}. Stage for execution but monitor spread stability and depth.`;
     triggerRules.push(`Rule 3 Triggered: Net Edge > 0 (+₹${netEdge}), but Liquidity is BORDERLINE (${liquidityScore} in [${Math.round(friction.liquidityThresholdScore * 0.75)}, ${friction.liquidityThresholdScore}))`);
+    if (isSimulatedLiquidity) {
+      triggerRules.push(`Simulation Sandbox: Evaluated with simulated liquidity score ${liquidityScore}/100 (Measured market depth: ${measuredLiquidityScore}/100).`);
+    }
     triggerRules.push(`Prudence Rule: Do not commit capital until volume confirms.`);
   }
   // 4. Actionable opportunity
   else {
-    decision = 'ACTIONABLE';
-    const maturityClause = inputs.expiryDifferenceDays && inputs.expiryDifferenceDays > 5
-      ? ` Note: Pair carries a ${inputs.expiryDifferenceDays}-day maturity difference; spread incorporates term-structure carry and must be liquidated before earlier tender window.`
-      : '';
-    rationale = `Observed relative-value edge survives liquidity and estimated execution friction. Dislocation of ₹${expectedEdge.toFixed(2)}/10g yields net defensible edge of +₹${netEdge.toFixed(2)}/10g with confirmed liquidity depth (${liquidityScore}/100).${maturityClause}`;
-    triggerRules.push(`Rule 4 Triggered: Net Edge (+₹${netEdge}/10g) > 0 and Liquidity Grade = PASS (${liquidityScore} ≥ ${friction.liquidityThresholdScore})`);
-    if (inputs.expiryDifferenceDays && inputs.expiryDifferenceDays > 5) {
-      triggerRules.push(`Maturity Limitation: ${inputs.expiryDifferenceDays}-day calendar difference introduces roll/carry basis.`);
+    const isUnverifiedCaution = isMarketDerived && inputs.isUnverifiedSource;
+    if (isUnverifiedCaution) {
+      decision = 'WATCH';
+      const maturityClause = inputs.expiryDifferenceDays && inputs.expiryDifferenceDays > 5
+        ? ` Note: Pair carries a ${inputs.expiryDifferenceDays}-day maturity difference; spread incorporates term-structure carry and must be liquidated before earlier tender window.`
+        : '';
+      rationale = `Observed relative-value edge (+₹${netEdge.toFixed(2)}/10g) survives estimated friction and liquidity screening, but dataset is unverified historical settlement data (USER-IMPORTED DATA — SOURCE UNVERIFIED). Pre-trade caution enforced: live market execution requires authenticated broker order-book depth and real-time tick verification before capital commitment.${maturityClause}`;
+      triggerRules.push(`Source Integrity Gate: Unverified historical settlement data cannot produce an unqualified live market execution recommendation.`);
+      triggerRules.push(`Pre-Trade Caution Rule: WATCH status enforced pending live broker feed verification.`);
+    } else {
+      decision = 'ACTIONABLE';
+      const maturityClause = inputs.expiryDifferenceDays && inputs.expiryDifferenceDays > 5
+        ? ` Note: Pair carries a ${inputs.expiryDifferenceDays}-day maturity difference; spread incorporates term-structure carry and must be liquidated before earlier tender window.`
+        : '';
+      rationale = `Observed relative-value edge survives liquidity and estimated execution friction. Dislocation of ₹${expectedEdge.toFixed(2)}/10g yields net defensible edge of +₹${netEdge.toFixed(2)}/10g with confirmed liquidity depth (${liquidityScore}/100).${maturityClause}`;
+      triggerRules.push(`Rule 4 Triggered: Net Edge (+₹${netEdge}/10g) > 0 and Liquidity Grade = PASS (${liquidityScore} ≥ ${friction.liquidityThresholdScore})`);
+      if (inputs.expiryDifferenceDays && inputs.expiryDifferenceDays > 5) {
+        triggerRules.push(`Maturity Limitation: ${inputs.expiryDifferenceDays}-day calendar difference introduces roll/carry basis.`);
+      }
+      if (isSimulatedLiquidity) {
+        triggerRules.push(`Simulation Sandbox: Evaluated with simulated liquidity score ${liquidityScore}/100 (Measured market depth: ${measuredLiquidityScore}/100).`);
+      }
+      triggerRules.push(`Actionable Signal: Dislocation exceeds all transaction hurdles with sufficient depth.`);
     }
-    triggerRules.push(`Actionable Signal: Dislocation exceeds all transaction hurdles with sufficient depth.`);
   }
 
   return {

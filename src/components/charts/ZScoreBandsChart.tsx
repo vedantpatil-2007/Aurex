@@ -8,6 +8,7 @@ interface ZScoreBandsChartProps {
   currentZScore: number;
   isCalculable?: boolean;
   incalculableReason?: string;
+  rollingWindowDays?: number;
 }
 
 export const ZScoreBandsChart: React.FC<ZScoreBandsChartProps> = ({
@@ -15,7 +16,8 @@ export const ZScoreBandsChart: React.FC<ZScoreBandsChartProps> = ({
   pair,
   currentZScore,
   isCalculable = true,
-  incalculableReason
+  incalculableReason,
+  rollingWindowDays = 20
 }) => {
   const isZScoreValid = isCalculable !== false && spreadSeries.length >= 5;
 
@@ -24,7 +26,7 @@ export const ZScoreBandsChart: React.FC<ZScoreBandsChartProps> = ({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-100 gap-2">
         <div>
           <h3 className="text-sm font-bold text-slate-900 tracking-tight font-mono">
-            Statistical Spread Dislocation (Rolling 20-Day Z-Score)
+            Statistical Spread Dislocation (Rolling {rollingWindowDays}-Day Z-Score)
           </h3>
           <p className="text-xs text-slate-500 mt-0.5">
             Z = (Spread − μ) / σ. Dislocation thresholds at ±1.5σ and ±2.0σ

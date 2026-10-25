@@ -298,7 +298,7 @@ export const RelativeValue: React.FC<RelativeValuePageProps> = ({
 
       {/* Chart 2: Relative Spread */}
       <SpreadTimeSeriesChart
-        spreadSeries={spreadSeries}
+        spreadSeries={zScoreAnalysis.series.length > 0 ? zScoreAnalysis.series : spreadSeries}
         pair={selectedPair}
         meanSpread={meanSpread}
         isCalculable={zScoreAnalysis.isCalculable}
@@ -306,11 +306,12 @@ export const RelativeValue: React.FC<RelativeValuePageProps> = ({
 
       {/* Chart 3: Rolling Z-Score with Threshold Markers (+2σ, +1.5σ, 0, -1.5σ, -2σ) */}
       <ZScoreBandsChart
-        spreadSeries={spreadSeries}
+        spreadSeries={zScoreAnalysis.series.length > 0 ? zScoreAnalysis.series : spreadSeries}
         pair={selectedPair}
         currentZScore={currentZScore}
         isCalculable={zScoreAnalysis.isCalculable}
         incalculableReason={zScoreAnalysis.incalculableReason}
+        rollingWindowDays={rollingWindow}
       />
 
       {/* Contract Comparability Evaluation for the active near-month pair */}

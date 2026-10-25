@@ -210,6 +210,7 @@ export function App() {
 
   // Manual Expected Edge override (optional demonstration input)
   const [manualEdge, setManualEdge] = useState<number | undefined>(undefined);
+  const [simulatedLiquidityScore, setSimulatedLiquidityScore] = useState<number | undefined>(undefined);
 
   // Data Quality & Health Audit
   const dataQualityReport = useMemo(() => {
@@ -285,6 +286,7 @@ export function App() {
       pair: selectedPair,
       observedSpread: latestPairSpread,
       manualExpectedEdge: manualEdge,
+      simulatedLiquidityScore: simulatedLiquidityScore,
       volA: latestA?.volume || 0,
       oiA: latestA?.openInterest || 0,
       volB: latestB?.volume || 0,
@@ -298,19 +300,22 @@ export function App() {
       hasSpreadData: hasActiveSpread,
       isTenderWindowRestricted: isTenderRestricted,
       tenderWindowReason: tenderReason,
-      expiryDifferenceDays: expiryDiff
+      expiryDifferenceDays: expiryDiff,
+      isUnverifiedSource: provenance.includes('UNVERIFIED')
     });
   }, [
     selectedPair,
     latestPairSpread,
     manualEdge,
+    simulatedLiquidityScore,
     asOfLatestObservations,
     friction,
     dataSufficiency,
     zScoreAnalysis.isCalculable,
     zScoreAnalysis.incalculableReason,
     contemporaneousSpread,
-    selectedDate
+    selectedDate,
+    provenance
   ]);
 
   return (
@@ -457,6 +462,8 @@ export function App() {
               onFrictionChange={setFriction}
               manualEdge={manualEdge}
               onManualEdgeChange={setManualEdge}
+              simulatedLiquidityScore={simulatedLiquidityScore}
+              onSimulatedLiquidityScoreChange={setSimulatedLiquidityScore}
               calculatedSpread={latestPairSpread}
               latestData={asOfLatestObservations}
               onNavigate={handleNavigate}
