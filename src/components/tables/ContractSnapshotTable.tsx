@@ -25,7 +25,7 @@ export const ContractSnapshotTable: React.FC<ContractSnapshotTableProps> = ({
             MCX Gold Contract Snapshot
           </h3>
           <p className="text-xs text-slate-500">
-            Active MCX gold contracts: heterogeneous lot sizes and purities observed on common date
+            Active MCX gold contracts: heterogeneous lot sizes and purities. Imported dataset contains same-date records for both contracts (not independent exchange verification).
           </p>
         </div>
         <div className="text-xs text-slate-500 font-mono">

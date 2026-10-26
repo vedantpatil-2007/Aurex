@@ -20,15 +20,13 @@ export const PrototypeBanner: React.FC<PrototypeBannerProps> = ({
   dataMode
 }) => {
   const isOfficial = provenance === 'OFFICIAL MCX DATA — SOURCE VERIFIED';
-  const isAttested = provenance === 'USER-ATTESTED SOURCE — NOT INDEPENDENTLY VERIFIED';
-  const isUserImported = provenance === 'USER-IMPORTED DATA — SOURCE UNVERIFIED';
+  const isAttested = metadata?.isUserAttested ?? (provenance === 'USER-ATTESTED SOURCE — NOT INDEPENDENTLY VERIFIED');
+  const isUserImported = provenance === 'USER-IMPORTED DATA — SOURCE UNVERIFIED' || isAttested;
   const isSample = provenance === 'PROTOTYPE SAMPLE — UNVERIFIED SOURCING';
   const isHybrid = provenance === 'HYBRID / MIXED PROVENANCE' || (dataMode === 'ALL' && (metadata?.provenanceBreakdown?.userImportedCount || 0) > 0);
 
   const badgeColor = isOfficial
     ? 'bg-emerald-600 text-white'
-    : isAttested
-    ? 'bg-teal-700 text-white'
     : isHybrid
     ? 'bg-purple-700 text-white font-bold'
     : isUserImported
@@ -39,8 +37,6 @@ export const PrototypeBanner: React.FC<PrototypeBannerProps> = ({
 
   const containerBg = isOfficial
     ? 'bg-emerald-50/70 border-emerald-200 text-emerald-950'
-    : isAttested
-    ? 'bg-teal-50/70 border-teal-200 text-teal-950'
     : isHybrid
     ? 'bg-purple-50/70 border-purple-200 text-purple-950'
     : isUserImported
@@ -56,8 +52,6 @@ export const PrototypeBanner: React.FC<PrototypeBannerProps> = ({
   let compactSummary = '';
   if (isOfficial) {
     compactSummary = `Official MCX · ${observationsCount.toLocaleString()} observations · Source Verified`;
-  } else if (isAttested) {
-    compactSummary = `User-Attested · ${sourceFilesCount > 1 ? `${sourceFilesCount} source files` : (filename || 'Bhavcopy CSV')} · ${observationsCount.toLocaleString()} obs · Not independently verified`;
   } else if (isHybrid) {
     const simCount = metadata?.provenanceBreakdown?.prototypeSimulationCount || 0;
     const impCount = metadata?.provenanceBreakdown?.userImportedCount || 0;
@@ -66,7 +60,7 @@ export const PrototypeBanner: React.FC<PrototypeBannerProps> = ({
     if (observationsCount === 0) {
       compactSummary = `Imported Mode · 0 observations loaded · Ingest Bhavcopy CSV in Data Lab`;
     } else {
-      compactSummary = `Imported · ${sourceFilesCount > 1 ? `${sourceFilesCount} source files` : (filename || 'Bhavcopy CSV')} · ${observationsCount.toLocaleString()} observations · Source unverified`;
+      compactSummary = `Imported${isAttested ? ' (User-Attested)' : ''} · ${sourceFilesCount > 1 ? `${sourceFilesCount} source files` : (filename || 'Bhavcopy CSV')} · ${observationsCount.toLocaleString()} observations · Source unverified`;
     }
   } else if (isSample) {
     compactSummary = `Sample Schema · ${observationsCount.toLocaleString()} observations · Unverified Sourcing`;
@@ -81,19 +75,27 @@ export const PrototypeBanner: React.FC<PrototypeBannerProps> = ({
           <Database className="w-3 h-3" />
           {provenance}
         </span>
-        <span className="text-slate-700 truncate max-w-full font-mono text-[11px]" title={filename}>
+        {isAttested && (
+          <span
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded font-mono font-bold tracking-wider text-[10px] uppercase shadow-xs shrink-0 bg-teal-800 text-white border border-teal-700"
+            title="User recorded a local source attestation note. This is NOT independent exchange verification."
+          >
+            USER ATTESTATION RECORDED — NOT INDEPENDENTLY VERIFIED
+          </span>
+        )}
+        <span className="text-slate-700 truncate max-w-full font-mono text-[11px] min-w-0" title={filename}>
           {compactSummary}
         </span>
       </div>
 
-      <div className="flex items-center gap-3 shrink-0">
-        <div className="flex items-center gap-1.5 text-slate-700 text-[11px]">
-          <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-          <span className="hidden xs:inline">Quality:</span>
+      <div className="flex items-center gap-3 shrink-0 flex-wrap">
+        <div className="flex items-center gap-1.5 text-slate-700 text-[11px]" title="Client-side schema, syntax and parsing validation checks. Does NOT imply independent MCX exchange verification.">
+          <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+          <span className="hidden xs:inline">Ingestion:</span>
           <span className={`font-mono font-bold px-1.5 py-0.2 rounded text-[10px] ${
             dataQualityStatus === 'PASS' ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-amber-100 text-amber-800 border border-amber-300'
           }`}>
-            {dataQualityStatus}
+            {dataQualityStatus === 'PASS' ? 'INGESTION PASS' : dataQualityStatus}
           </span>
         </div>
 

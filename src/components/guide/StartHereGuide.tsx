@@ -75,9 +75,9 @@ export const StartHereGuide: React.FC<StartHereGuideProps> = ({
             <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900 font-mono mb-3">
               The 5-Step AUREX Workflow
             </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
               {/* Step 1 */}
-              <div className="bg-slate-50/70 border border-slate-200 rounded-lg p-3 flex flex-col justify-between space-y-2">
+              <div className="bg-slate-50/70 border border-slate-200 rounded-lg p-3 flex flex-col justify-between space-y-2 min-w-0">
                 <div>
                   <div className="flex items-center justify-between text-slate-400 font-mono text-[11px] mb-1">
                     <span>STEP 1</span>
@@ -100,7 +100,7 @@ export const StartHereGuide: React.FC<StartHereGuideProps> = ({
               </div>
 
               {/* Step 2 */}
-              <div className="bg-slate-50/70 border border-slate-200 rounded-lg p-3 flex flex-col justify-between space-y-2">
+              <div className="bg-slate-50/70 border border-slate-200 rounded-lg p-3 flex flex-col justify-between space-y-2 min-w-0">
                 <div>
                   <div className="flex items-center justify-between text-slate-400 font-mono text-[11px] mb-1">
                     <span>STEP 2</span>
@@ -123,7 +123,7 @@ export const StartHereGuide: React.FC<StartHereGuideProps> = ({
               </div>
 
               {/* Step 3 */}
-              <div className="bg-slate-50/70 border border-slate-200 rounded-lg p-3 flex flex-col justify-between space-y-2">
+              <div className="bg-slate-50/70 border border-slate-200 rounded-lg p-3 flex flex-col justify-between space-y-2 min-w-0">
                 <div>
                   <div className="flex items-center justify-between text-slate-400 font-mono text-[11px] mb-1">
                     <span>STEP 3</span>
@@ -146,7 +146,7 @@ export const StartHereGuide: React.FC<StartHereGuideProps> = ({
               </div>
 
               {/* Step 4 */}
-              <div className="bg-slate-50/70 border border-slate-200 rounded-lg p-3 flex flex-col justify-between space-y-2">
+              <div className="bg-slate-50/70 border border-slate-200 rounded-lg p-3 flex flex-col justify-between space-y-2 min-w-0">
                 <div>
                   <div className="flex items-center justify-between text-slate-400 font-mono text-[11px] mb-1">
                     <span>STEP 4</span>
@@ -169,7 +169,7 @@ export const StartHereGuide: React.FC<StartHereGuideProps> = ({
               </div>
 
               {/* Step 5 */}
-              <div className="bg-slate-50/70 border border-slate-200 rounded-lg p-3 flex flex-col justify-between space-y-2">
+              <div className="bg-slate-50/70 border border-slate-200 rounded-lg p-3 flex flex-col justify-between space-y-2 min-w-0">
                 <div>
                   <div className="flex items-center justify-between text-slate-400 font-mono text-[11px] mb-1">
                     <span>STEP 5</span>

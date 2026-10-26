@@ -61,7 +61,7 @@ export const Overview: React.FC<OverviewPageProps> = ({
         </div>
 
         {/* Quick Pair Switcher */}
-        <div className="bg-white border border-slate-200 p-2 rounded-lg shadow-sm flex items-center gap-2 self-start">
+        <div className="bg-white border border-slate-200 p-2 rounded-lg shadow-sm flex items-center gap-2 self-start flex-wrap">
           <span className="text-[11px] text-slate-500 font-medium font-sans">Active:</span>
           <button
             onClick={() => onPairChange(['GOLDM', 'GOLDTEN'])}

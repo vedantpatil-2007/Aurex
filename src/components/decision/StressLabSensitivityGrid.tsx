@@ -8,15 +8,17 @@ import {
 import { evaluateDecision } from '../../engines/decisionEngine';
 import { calculateTotalFriction } from '../../engines/liquidityCostEngine';
 import { 
-  Sliders, 
   CheckCircle2, 
-  AlertTriangle, 
   XCircle, 
-  ShieldCheck, 
-  Activity,
-  Layers,
-  ArrowRight
+  Info
 } from 'lucide-react';
+
+export const SENSITIVITY_ANALYSIS_NOTE =
+  'Sensitivity analysis evaluates estimated transaction costs only. The final decision may remain WATCH because data provenance and live broker-feed verification are separate requirements.';
+
+export function getCostTestStatus(netEdge: number): 'COST TEST PASSES' | 'COST TEST FAILS' {
+  return netEdge > 0 ? 'COST TEST PASSES' : 'COST TEST FAILS';
+}
 
 interface StressLabSensitivityGridProps {
   pair: [ContractSymbol, ContractSymbol];
@@ -105,7 +107,8 @@ export const StressLabSensitivityGrid: React.FC<StressLabSensitivityGridProps> =
         description: 'Optimistic execution: tight crossing spread, low impact.',
         assumptions: lowerFriction,
         decisionResult: lowerResult,
-        survivesEdge: lowerResult.netEdge > 0
+        survivesEdge: lowerResult.netEdge > 0,
+        costTestStatus: getCostTestStatus(lowerResult.netEdge)
       },
       {
         id: 'base',
@@ -113,7 +116,8 @@ export const StressLabSensitivityGrid: React.FC<StressLabSensitivityGridProps> =
         description: 'Standard retail/HNI execution with conservative buffer.',
         assumptions: baseFriction,
         decisionResult: baseResult,
-        survivesEdge: baseResult.netEdge > 0
+        survivesEdge: baseResult.netEdge > 0,
+        costTestStatus: getCostTestStatus(baseResult.netEdge)
       },
       {
         id: 'higher',
@@ -121,36 +125,28 @@ export const StressLabSensitivityGrid: React.FC<StressLabSensitivityGridProps> =
         description: 'Stressed conditions: wider spreads, severe market impact.',
         assumptions: higherFriction,
         decisionResult: higherResult,
-        survivesEdge: higherResult.netEdge > 0
+        survivesEdge: higherResult.netEdge > 0,
+        costTestStatus: getCostTestStatus(higherResult.netEdge)
       }
     ];
   }, [pair, observedSpread, manualExpectedEdge, volA, oiA, volB, oiB, baseFriction]);
 
-  const getDecisionTag = (decision: string) => {
-    switch (decision) {
-      case 'ACTIONABLE':
-        return (
-          <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-600 text-white flex items-center gap-1">
-            <CheckCircle2 className="w-3 h-3" />
-            ACTIONABLE
-          </span>
-        );
-      case 'WATCH':
-        return (
-          <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500 text-slate-950 flex items-center gap-1">
-            <AlertTriangle className="w-3 h-3" />
-            WATCH
-          </span>
-        );
-      case 'NO TRADE':
-      default:
-        return (
-          <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-rose-600 text-white flex items-center gap-1">
-            <XCircle className="w-3 h-3" />
-            NO TRADE
-          </span>
-        );
+  const getCostTestTag = (scenario: SensitivityScenario) => {
+    const isPassing = scenario.decisionResult.netEdge > 0;
+    if (isPassing) {
+      return (
+        <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-600 text-white flex items-center gap-1">
+          <CheckCircle2 className="w-3 h-3" />
+          COST TEST PASSES
+        </span>
+      );
     }
+    return (
+      <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-rose-600 text-white flex items-center gap-1">
+        <XCircle className="w-3 h-3" />
+        COST TEST FAILS
+      </span>
+    );
   };
 
   return (
@@ -196,7 +192,7 @@ export const StressLabSensitivityGrid: React.FC<StressLabSensitivityGridProps> =
                   <span className="text-xs font-mono font-bold uppercase tracking-wider text-slate-800">
                     {sc.name} {isBase && <span className="text-amber-600 text-[10px]">(Active)</span>}
                   </span>
-                  {getDecisionTag(sc.decisionResult.decision)}
+                  {getCostTestTag(sc)}
                 </div>
 
                 <div className="text-[11px] text-slate-600 leading-snug">
@@ -246,6 +242,14 @@ export const StressLabSensitivityGrid: React.FC<StressLabSensitivityGridProps> =
             </div>
           );
         })}
+      </div>
+
+      {/* Scope / Provenance Note */}
+      <div className="flex items-start gap-2.5 p-3 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-600">
+        <Info className="w-4 h-4 text-slate-500 shrink-0 mt-0.5" />
+        <p className="leading-relaxed">
+          {SENSITIVITY_ANALYSIS_NOTE}
+        </p>
       </div>
     </div>
   );

@@ -67,13 +67,13 @@ export const Decision: React.FC<DecisionPageProps> = ({
   latestData,
   onNavigate,
   dataMode,
-  onSelectDataMode,
+  onSelectDataMode: _onSelectDataMode,
   selectedDate,
   availableDates,
   latestAvailableDate,
   onSelectDate,
-  provenance,
-  metadata,
+  provenance: _provenance,
+  metadata: _metadata,
   hasSpreadData,
   missingSpreadReason,
   spreadSeriesLength,
@@ -165,124 +165,6 @@ export const Decision: React.FC<DecisionPageProps> = ({
             <span>Open Edge Survival Ledger</span>
           </button>
           <DecisionBadge decision={decisionResult.decision} size="lg" />
-        </div>
-      </div>
-
-      {/* Active Valuation Context & Date Control Bar */}
-      <div className="bg-white border border-slate-200 rounded-xl p-3.5 sm:p-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
-        {/* Left: Mode, Provenance & Source */}
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="flex items-center gap-1.5">
-            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider font-mono">
-              Dataset Mode:
-            </span>
-            {onSelectDataMode ? (
-              <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200">
-                <button
-                  onClick={() => onSelectDataMode('ALL')}
-                  className={`px-2 py-0.5 rounded font-mono font-bold text-[10px] sm:text-[11px] transition-colors ${
-                    dataMode === 'ALL'
-                      ? 'bg-slate-900 text-amber-400 shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                  title="ALL mode: Access prototype simulation and imported observations"
-                >
-                  ALL
-                </button>
-                <button
-                  onClick={() => onSelectDataMode('PROTOTYPE_ONLY')}
-                  className={`px-2 py-0.5 rounded font-mono font-bold text-[10px] sm:text-[11px] transition-colors ${
-                    dataMode === 'PROTOTYPE_ONLY'
-                      ? 'bg-amber-500 text-slate-950 shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                  title="PROTOTYPE ONLY: Calibrated simulation for demonstrations"
-                >
-                  PROTOTYPE
-                </button>
-                <button
-                  onClick={() => onSelectDataMode('IMPORTED_ONLY')}
-                  className={`px-2 py-0.5 rounded font-mono font-bold text-[10px] sm:text-[11px] transition-colors ${
-                    dataMode === 'IMPORTED_ONLY'
-                      ? 'bg-sky-600 text-white shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                  title="IMPORTED ONLY: Authentic user-imported MCX Bhavcopy market observations only"
-                >
-                  IMPORTED
-                </button>
-              </div>
-            ) : (
-              <span className={`px-2 py-0.5 rounded font-mono font-bold text-[10px] ${
-                dataMode === 'IMPORTED_ONLY' ? 'bg-sky-100 text-sky-800 border border-sky-300' :
-                dataMode === 'PROTOTYPE_ONLY' ? 'bg-amber-100 text-amber-800 border border-amber-300' :
-                'bg-slate-100 text-slate-800 border border-slate-300'
-              }`}>
-                {dataMode || 'ALL'}
-              </span>
-            )}
-          </div>
-
-          <span className="hidden sm:inline text-slate-300">•</span>
-
-          <div className="flex items-center gap-1.5">
-            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider font-mono">
-              Provenance:
-            </span>
-            <span className={`px-2 py-0.5 rounded font-mono font-semibold text-[10px] ${
-              provenance === 'OFFICIAL MCX DATA — SOURCE VERIFIED'
-                ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                : provenance === 'PROTOTYPE SIMULATION'
-                ? 'bg-amber-100 text-amber-800 border border-amber-300'
-                : 'bg-sky-50 text-sky-800 border border-sky-300'
-            }`}>
-              {provenance || 'ACTIVE DATASET'}
-            </span>
-          </div>
-
-          {metadata?.filename && (
-            <>
-              <span className="hidden lg:inline text-slate-300">•</span>
-              <div className="hidden lg:block text-[11px] font-mono text-slate-500 truncate max-w-[260px]" title={metadata.filename}>
-                Source: {metadata.filename}
-              </div>
-            </>
-          )}
-        </div>
-
-        {/* Right: Valuation Date Selector with Quick Jump */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex items-center gap-1.5 text-xs text-slate-700 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200">
-            <Calendar className="w-3.5 h-3.5 text-slate-400" />
-            <span className="text-slate-500 font-semibold text-[11px] font-mono">Valuation As-Of:</span>
-            {availableDates && onSelectDate && availableDates.length > 0 ? (
-              <div className="flex items-center gap-1.5">
-                <select
-                  value={selectedDate}
-                  onChange={e => onSelectDate(e.target.value)}
-                  className="bg-transparent font-mono font-bold text-slate-900 text-xs focus:outline-none cursor-pointer"
-                  title="Select As-Of valuation date"
-                >
-                  {availableDates.map(d => (
-                    <option key={d} value={d}>
-                      {d} {d === latestAvailableDate ? '(Latest)' : ''}
-                    </option>
-                  ))}
-                </select>
-                {latestAvailableDate && selectedDate !== latestAvailableDate && (
-                  <button
-                    onClick={() => onSelectDate(latestAvailableDate)}
-                    className="px-2 py-0.5 rounded bg-amber-500 hover:bg-amber-600 text-slate-950 font-mono font-bold text-[10px] transition-colors shadow-xs ml-1"
-                    title="Jump to latest available market observation"
-                  >
-                    Jump to Latest ({latestAvailableDate})
-                  </button>
-                )}
-              </div>
-            ) : (
-              <span className="font-mono font-bold text-slate-900">{selectedDate || 'N/A'}</span>
-            )}
-          </div>
         </div>
       </div>
 

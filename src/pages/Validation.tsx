@@ -116,19 +116,24 @@ export const Validation: React.FC<ValidationPageProps> = ({
           <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 font-mono">
             Walk-Forward Testing Protocol
           </h3>
-          <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded font-mono ${
-            activeProvenance === 'OFFICIAL MCX DATA — SOURCE VERIFIED'
-              ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-              : activeProvenance === 'USER-ATTESTED SOURCE — NOT INDEPENDENTLY VERIFIED'
-              ? 'bg-teal-100 text-teal-800 border border-teal-300'
-              : activeProvenance === 'USER-IMPORTED DATA — SOURCE UNVERIFIED'
-              ? 'bg-sky-100 text-sky-800 border border-sky-300'
-              : activeProvenance === 'PROTOTYPE SAMPLE — UNVERIFIED SOURCING' || activeProvenance === 'PROTOTYPE SIMULATION'
-              ? 'bg-indigo-100 text-indigo-800 border border-indigo-300'
-              : 'bg-amber-100 text-amber-800 border border-amber-300'
-          }`}>
-            {activeProvenance}
-          </span>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded font-mono ${
+              activeProvenance === 'OFFICIAL MCX DATA — SOURCE VERIFIED'
+                ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                : activeProvenance === 'USER-IMPORTED DATA — SOURCE UNVERIFIED'
+                ? 'bg-sky-100 text-sky-800 border border-sky-300'
+                : activeProvenance === 'PROTOTYPE SAMPLE — UNVERIFIED SOURCING' || activeProvenance === 'PROTOTYPE SIMULATION'
+                ? 'bg-indigo-100 text-indigo-800 border border-indigo-300'
+                : 'bg-amber-100 text-amber-800 border border-amber-300'
+            }`}>
+              {activeProvenance}
+            </span>
+            {marketDataService.getMetadata(activeMode).isUserAttested && (
+              <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded font-mono bg-teal-100 text-teal-800 border border-teal-300">
+                USER ATTESTATION RECORDED — NOT INDEPENDENTLY VERIFIED
+              </span>
+            )}
+          </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 pt-1">
@@ -216,19 +221,24 @@ export const Validation: React.FC<ValidationPageProps> = ({
               Rolling Window Statistical Edge Summary
             </h3>
           </div>
-          <span className={`text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded font-mono ${
-            activeProvenance === 'OFFICIAL MCX DATA — SOURCE VERIFIED'
-              ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-              : activeProvenance === 'USER-ATTESTED SOURCE — NOT INDEPENDENTLY VERIFIED'
-              ? 'bg-teal-100 text-teal-800 border border-teal-300'
-              : activeProvenance === 'USER-IMPORTED DATA — SOURCE UNVERIFIED'
-              ? 'bg-sky-100 text-sky-800 border border-sky-300'
-              : activeProvenance === 'PROTOTYPE SAMPLE — UNVERIFIED SOURCING' || activeProvenance === 'PROTOTYPE SIMULATION'
-              ? 'bg-indigo-100 text-indigo-800 border border-indigo-300'
-              : 'bg-amber-100 text-amber-800 border border-amber-300'
-          }`}>
-            {activeProvenance}
-          </span>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className={`text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded font-mono ${
+              activeProvenance === 'OFFICIAL MCX DATA — SOURCE VERIFIED'
+                ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                : activeProvenance === 'USER-IMPORTED DATA — SOURCE UNVERIFIED'
+                ? 'bg-sky-100 text-sky-800 border border-sky-300'
+                : activeProvenance === 'PROTOTYPE SAMPLE — UNVERIFIED SOURCING' || activeProvenance === 'PROTOTYPE SIMULATION'
+                ? 'bg-indigo-100 text-indigo-800 border border-indigo-300'
+                : 'bg-amber-100 text-amber-800 border border-amber-300'
+            }`}>
+              {activeProvenance}
+            </span>
+            {marketDataService.getMetadata(activeMode).isUserAttested && (
+              <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded font-mono bg-teal-100 text-teal-800 border border-teal-300">
+                USER ATTESTATION RECORDED — NOT INDEPENDENTLY VERIFIED
+              </span>
+            )}
+          </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

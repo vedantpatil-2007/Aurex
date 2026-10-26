@@ -93,7 +93,7 @@ export function buildEdgeSurvivalLedger(params: LedgerGenerationParams): EdgeSur
     isTenderWindowRestricted: isTenderRestricted,
     tenderWindowReason: tenderReason,
     expiryDifferenceDays: expiryDiff,
-    isUnverifiedSource: provenance.includes('UNVERIFIED')
+    isUnverifiedSource: provenance !== 'OFFICIAL MCX DATA — SOURCE VERIFIED'
   });
 
   const stages: LedgerStageData[] = [];

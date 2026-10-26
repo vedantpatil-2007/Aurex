@@ -307,7 +307,7 @@ export function App() {
       isTenderWindowRestricted: isTenderRestricted,
       tenderWindowReason: tenderReason,
       expiryDifferenceDays: expiryDiff,
-      isUnverifiedSource: provenance.includes('UNVERIFIED')
+      isUnverifiedSource: provenance !== 'OFFICIAL MCX DATA — SOURCE VERIFIED'
     });
   }, [
     selectedPair,
@@ -474,7 +474,6 @@ export function App() {
               latestData={asOfLatestObservations}
               onNavigate={handleNavigate}
               dataMode={dataMode}
-              onSelectDataMode={handleSelectDataMode}
               selectedDate={selectedDate}
               availableDates={availableDates}
               latestAvailableDate={latestAvailableDate}

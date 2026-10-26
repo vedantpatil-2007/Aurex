@@ -188,6 +188,9 @@ export interface DataQualityReport {
   }[];
 }
 
+export const CANONICAL_IMPORTED_PROVENANCE = 'USER-IMPORTED DATA — SOURCE UNVERIFIED';
+export const ATTESTATION_RECORDED_LABEL = 'USER ATTESTATION RECORDED — NOT INDEPENDENTLY VERIFIED';
+
 export type DataProvenance =
   | 'PROTOTYPE SIMULATION'
   | 'PROTOTYPE SAMPLE — UNVERIFIED SOURCING'
@@ -260,6 +263,7 @@ export interface DatasetMetadata {
   knownLimitations: string[];
   sourceClassification: string;
   isUserAttested?: boolean;
+  attestationStatus?: string;
   attestationNotes?: string;
   attestationTimestamp?: string;
   isVerified?: boolean;
@@ -349,6 +353,7 @@ export interface DataHealthSummary {
   fileHashSha256?: string;
   storagePersistence?: string;
   isUserAttested?: boolean;
+  attestationStatus?: string;
   attestationNotes?: string;
   attestationTimestamp?: string;
   isVerified?: boolean;
@@ -411,6 +416,7 @@ export interface SensitivityScenario {
   assumptions: FrictionAssumptions;
   decisionResult: DecisionResult;
   survivesEdge: boolean;
+  costTestStatus?: 'COST TEST PASSES' | 'COST TEST FAILS';
 }
 
 export interface JudgeWalkthroughStep {

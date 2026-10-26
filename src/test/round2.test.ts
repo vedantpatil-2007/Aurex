@@ -296,12 +296,13 @@ describe('AUREX Round 2 Comprehensive Evidence Verification Suite', () => {
     expect(marketDataService.getDataHealthSummary().isVerified).toBe(false);
     expect(marketDataService.getDataHealthSummary().isUserAttested).toBe(false);
 
-    // 4. Recording an attestation promotes ONLY to USER-ATTESTED SOURCE — NOT INDEPENDENTLY VERIFIED
+    // 4. Recording an attestation retains canonical USER-IMPORTED DATA — SOURCE UNVERIFIED and sets attestation separately
     marketDataService.recordSourceAttestation('Downloaded directly from MCX daily bhavcopy archive');
-    expect(marketDataService.getProvenance()).toBe('USER-ATTESTED SOURCE — NOT INDEPENDENTLY VERIFIED');
+    expect(marketDataService.getProvenance()).toBe('USER-IMPORTED DATA — SOURCE UNVERIFIED');
     const healthAfterAttestation = marketDataService.getDataHealthSummary();
-    expect(healthAfterAttestation.provenance).toBe('USER-ATTESTED SOURCE — NOT INDEPENDENTLY VERIFIED');
+    expect(healthAfterAttestation.provenance).toBe('USER-IMPORTED DATA — SOURCE UNVERIFIED');
     expect(healthAfterAttestation.isUserAttested).toBe(true);
+    expect(healthAfterAttestation.attestationStatus).toBe('USER ATTESTATION RECORDED — NOT INDEPENDENTLY VERIFIED');
     expect(healthAfterAttestation.isVerified).toBe(false); // MUST NOT be marked verified
     expect(healthAfterAttestation.attestationNotes).toBe('Downloaded directly from MCX daily bhavcopy archive');
     expect(healthAfterAttestation.attestationTimestamp).toBeDefined();
@@ -310,8 +311,8 @@ describe('AUREX Round 2 Comprehensive Evidence Verification Suite', () => {
     expect(() => marketDataService.verifyActiveDataset('Arbitrary self-certification notes')).toThrow(
       'Independent official-source verification is unavailable'
     );
-    // Provenance remains safely at USER-ATTESTED
-    expect(marketDataService.getProvenance()).toBe('USER-ATTESTED SOURCE — NOT INDEPENDENTLY VERIFIED');
+    // Provenance remains safely at USER-IMPORTED DATA — SOURCE UNVERIFIED
+    expect(marketDataService.getProvenance()).toBe('USER-IMPORTED DATA — SOURCE UNVERIFIED');
 
     // 6. Revoking attestation restores USER-IMPORTED DATA — SOURCE UNVERIFIED
     marketDataService.revokeSourceAttestation();

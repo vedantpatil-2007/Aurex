@@ -280,8 +280,8 @@ class MarketDataService {
       return 'PROTOTYPE SIMULATION';
     }
     if (dataMode === 'IMPORTED_ONLY') {
-      return this.metadata.isUserAttested
-        ? 'USER-ATTESTED SOURCE — NOT INDEPENDENTLY VERIFIED'
+      return this.metadata.isVerified
+        ? 'OFFICIAL MCX DATA — SOURCE VERIFIED'
         : 'USER-IMPORTED DATA — SOURCE UNVERIFIED';
     }
     return this.provenance;
@@ -415,10 +415,13 @@ class MarketDataService {
       provenance: mode === 'PROTOTYPE_ONLY'
         ? 'PROTOTYPE SIMULATION'
         : mode === 'IMPORTED_ONLY'
-        ? (this.metadata.isUserAttested
-          ? 'USER-ATTESTED SOURCE — NOT INDEPENDENTLY VERIFIED'
+        ? (this.metadata.isVerified
+          ? 'OFFICIAL MCX DATA — SOURCE VERIFIED'
           : 'USER-IMPORTED DATA — SOURCE UNVERIFIED')
-        : this.getProvenance(),
+        : this.getProvenance(mode),
+      attestationStatus: this.metadata.isUserAttested
+        ? 'USER ATTESTATION RECORDED — NOT INDEPENDENTLY VERIFIED'
+        : undefined,
       provenanceBreakdown: breakdown
     };
   }
@@ -607,7 +610,7 @@ class MarketDataService {
     const currentProvenance = mode === 'PROTOTYPE_ONLY'
       ? 'PROTOTYPE SIMULATION'
       : mode === 'IMPORTED_ONLY'
-      ? 'USER-IMPORTED DATA — SOURCE UNVERIFIED'
+      ? (this.metadata.isVerified ? 'OFFICIAL MCX DATA — SOURCE VERIFIED' : 'USER-IMPORTED DATA — SOURCE UNVERIFIED')
       : isHybrid
       ? 'HYBRID / MIXED PROVENANCE'
       : this.provenance;
@@ -636,6 +639,9 @@ class MarketDataService {
       fileHashSha256: this.metadata.fileHashSha256,
       storagePersistence: this.isPersistedInLocalStorage ? 'BROWSER LOCAL STORAGE (PERSISTENT)' : 'SESSION MEMORY',
       isUserAttested: this.metadata.isUserAttested ?? false,
+      attestationStatus: this.metadata.isUserAttested
+        ? 'USER ATTESTATION RECORDED — NOT INDEPENDENTLY VERIFIED'
+        : undefined,
       attestationNotes: this.metadata.attestationNotes,
       attestationTimestamp: this.metadata.attestationTimestamp,
       isVerified: this.metadata.isVerified ?? false,
@@ -1246,20 +1252,22 @@ class MarketDataService {
 
   /**
    * Records a user assertion/attestation that an uploaded file originated from MCX.
-   * Explicitly sets provenance to 'USER-ATTESTED SOURCE — NOT INDEPENDENTLY VERIFIED'.
+   * Keeps underlying data provenance strictly canonical as 'USER-IMPORTED DATA — SOURCE UNVERIFIED'
+   * and records attestation status separately as 'USER ATTESTATION RECORDED — NOT INDEPENDENTLY VERIFIED'.
    */
   public recordSourceAttestation(notes = 'User asserted origin from official MCX Bhavcopy archive'): boolean {
     if (this.provenance === 'PROTOTYPE SIMULATION' || this.provenance === 'PROTOTYPE SAMPLE — UNVERIFIED SOURCING') {
       throw new Error('Synthetic simulation or bundled prototype samples cannot accept user source attestation.');
     }
 
-    this.provenance = 'USER-ATTESTED SOURCE — NOT INDEPENDENTLY VERIFIED';
-    this.metadata.provenance = 'USER-ATTESTED SOURCE — NOT INDEPENDENTLY VERIFIED';
+    this.provenance = 'USER-IMPORTED DATA — SOURCE UNVERIFIED';
+    this.metadata.provenance = 'USER-IMPORTED DATA — SOURCE UNVERIFIED';
     this.metadata.isUserAttested = true;
     this.metadata.isVerified = false;
     this.metadata.attestationNotes = notes;
     this.metadata.attestationTimestamp = new Date().toISOString();
-    this.metadata.sourceClassification = 'User-Attested Bhavcopy CSV File (Not Independently Verified)';
+    this.metadata.attestationStatus = 'USER ATTESTATION RECORDED — NOT INDEPENDENTLY VERIFIED';
+    this.metadata.sourceClassification = 'User-Imported MCX Bhavcopy Dataset (User Attestation Recorded)';
 
     const disclosure = 'Uploading a file and recording a source attestation does not independently verify that the file originated from MCX. AUREX currently has no independent official-source verification mechanism. User-attested datasets remain independently unverified.';
     if (!this.metadata.knownLimitations.includes(disclosure)) {
@@ -1272,16 +1280,15 @@ class MarketDataService {
   }
 
   /**
-   * Revokes user attestation and restores dataset to 'USER-IMPORTED DATA — SOURCE UNVERIFIED'.
+   * Revokes user attestation and clears attestation status while preserving canonical 'USER-IMPORTED DATA — SOURCE UNVERIFIED'.
    */
   public revokeSourceAttestation(): void {
-    if (this.provenance === 'USER-ATTESTED SOURCE — NOT INDEPENDENTLY VERIFIED') {
-      this.provenance = 'USER-IMPORTED DATA — SOURCE UNVERIFIED';
-      this.metadata.provenance = 'USER-IMPORTED DATA — SOURCE UNVERIFIED';
+    if (this.metadata.isUserAttested) {
       this.metadata.isUserAttested = false;
       this.metadata.attestationNotes = undefined;
       this.metadata.attestationTimestamp = undefined;
-      this.metadata.sourceClassification = 'User-Provided Bhavcopy CSV File (Source Unverified)';
+      this.metadata.attestationStatus = undefined;
+      this.metadata.sourceClassification = 'User-Imported MCX Bhavcopy Dataset';
       this.saveToLocalStorage();
       this.emitChange();
     }
@@ -1678,6 +1685,7 @@ class MarketDataService {
         filename: backupFilename,
         validRows: allImported.length,
         totalRows: mergedRecords.length,
+        rejectedRows: parsed.metadata?.rejectedRows ?? this.metadata.rejectedRows ?? 0,
         duplicateCount: (this.metadata.duplicateCount || 0) + unchangedDuplicatesCount,
         dateRange: { start: allDates[0] || 'N/A', end: allDates[allDates.length - 1] || 'N/A' },
         contractCoverage: this.recalculateCoverage(allImported),

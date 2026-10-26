@@ -98,7 +98,7 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       {/* Right-side status, pair indicator & notification bell */}
-      <div className="flex items-center gap-2 sm:gap-3">
+      <div className="flex items-center gap-2 sm:gap-3 flex-wrap justify-end min-w-0">
         {/* Authoritative Data Mode Selector */}
         {dataMode && onSelectDataMode && (
           <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs">

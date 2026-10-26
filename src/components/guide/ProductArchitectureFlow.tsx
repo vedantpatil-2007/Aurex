@@ -65,19 +65,19 @@ export const ProductArchitectureFlow: React.FC = () => {
         </span>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-7 gap-2">
         {pipelineSteps.map((step, idx) => (
           <div
             key={idx}
-            className="bg-slate-50 border border-slate-200/80 rounded-lg p-2.5 text-center flex flex-col items-center justify-between hover:bg-amber-50/40 transition-colors"
+            className="bg-slate-50 border border-slate-200/80 rounded-lg p-2.5 text-center flex flex-col items-center justify-between hover:bg-amber-50/40 transition-colors min-w-0"
           >
-            <div className="w-6 h-6 rounded-full bg-white border border-slate-200 flex items-center justify-center mb-1.5 shadow-2xs">
+            <div className="w-6 h-6 rounded-full bg-white border border-slate-200 flex items-center justify-center mb-1.5 shadow-2xs shrink-0">
               {step.icon}
             </div>
-            <div className="font-mono font-bold text-xs text-slate-900 leading-tight">
+            <div className="font-mono font-bold text-xs text-slate-900 leading-tight break-words">
               {step.label}
             </div>
-            <div className="text-[10px] text-slate-500 leading-tight mt-0.5">
+            <div className="text-[10px] text-slate-500 leading-tight mt-0.5 break-words">
               {step.sub}
             </div>
           </div>

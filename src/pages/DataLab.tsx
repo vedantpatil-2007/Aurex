@@ -23,9 +23,7 @@ import {
   Info,
   FileText,
   Trash2,
-  ArrowRight,
-  ExternalLink,
-  ShieldAlert
+  ArrowRight
 } from 'lucide-react';
 
 interface DataLabProps {
@@ -48,10 +46,14 @@ export const DataLab: React.FC<DataLabProps> = ({
   const effectiveMode = dataMode ?? marketDataService.getActiveDataMode();
   const activeMetadata = marketDataService.getMetadata(effectiveMode);
   const totalStoredRecords = marketDataService.getMetadata('ALL').totalRows;
-  const prototypeStoredCount = marketDataService.getMetadata('PROTOTYPE_ONLY').validRows;
   const importedStoredCount = marketDataService.getMetadata('IMPORTED_ONLY').validRows;
   const modeDistinctDates = marketDataService.getAvailableDates(effectiveMode);
   const activeProvenance = activeMetadata.provenance;
+  const parsedSourceRows = (activeMetadata.validRows || 0) + (activeMetadata.rejectedRows || 0);
+  const sourceFilesCount = activeMetadata.sourceFiles?.length ||
+    (activeMetadata.filename && activeMetadata.filename.includes(',')
+      ? activeMetadata.filename.split(',').length
+      : (activeMetadata.validRows > 0 && activeMetadata.filename !== 'No Imported Dataset' && activeMetadata.filename !== 'seed_prototype_simulation.internal' ? 1 : 0));
 
   const formattedDateRange = useMemo(() => {
     if (modeDistinctDates.length === 0) return 'No Dates Available';
@@ -475,68 +477,109 @@ export const DataLab: React.FC<DataLabProps> = ({
         </div>
       )}
 
-      {/* Compact Active Dataset Summary Panel */}
-      <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-5 shadow-sm space-y-3">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          {/* Primary Summary Metrics */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 sm:gap-6 text-xs">
-            {/* 1. Valid Observations in Selected Mode */}
-            <div className="space-y-0.5">
-              <div className="text-[10px] uppercase font-mono font-semibold tracking-wider text-slate-500">
-                Mode Observations
-              </div>
-              <div className="text-lg font-bold font-mono text-slate-900">
-                {activeMetadata.validRows.toLocaleString()} <span className="text-xs font-normal text-slate-500">valid rows</span>
-              </div>
-            </div>
+      {/* Active Dataset Ingestion & Quality Summary Panel */}
+      <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-5 shadow-sm space-y-4">
+        {/* Panel Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-100">
+          <div className="flex items-center gap-2 flex-wrap min-w-0">
+            <Database className="w-4 h-4 text-amber-600 shrink-0" />
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 font-mono">
+              Dataset Ingestion & Quality Summary
+            </h3>
+            <span className={`px-2 py-0.5 rounded font-mono font-bold text-[10px] shrink-0 ${
+              effectiveMode === 'IMPORTED_ONLY' ? 'bg-sky-100 text-sky-800 border border-sky-300' :
+              effectiveMode === 'PROTOTYPE_ONLY' ? 'bg-amber-100 text-amber-800 border border-amber-300' :
+              'bg-slate-100 text-slate-800 border border-slate-300'
+            }`}>
+              {effectiveMode}
+            </span>
+          </div>
+          <div className="text-[11px] font-mono text-slate-500 break-words min-w-0 flex items-center gap-1.5 flex-wrap">
+            <span>Provenance: <strong className="text-slate-800">{activeProvenance}</strong></span>
+            {activeMetadata.isUserAttested && (
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-teal-100 text-teal-900 border border-teal-300">
+                USER ATTESTATION RECORDED — NOT INDEPENDENTLY VERIFIED
+              </span>
+            )}
+          </div>
+        </div>
 
-            {/* 2. Distinct Trading Dates and Date Range */}
-            <div className="space-y-0.5">
-              <div className="text-[10px] uppercase font-mono font-semibold tracking-wider text-slate-500">
-                Trading Dates
-              </div>
-              <div className="text-sm font-bold font-mono text-slate-900">
-                {modeDistinctDates.length} {modeDistinctDates.length === 1 ? 'Trading Date' : 'Trading Dates'}
-              </div>
-              <div className="text-[11px] font-mono text-slate-600">
-                {formattedDateRange}
-              </div>
+        {/* 5-Column Responsive Metric Grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
+          {/* 1. Parsed Source Rows */}
+          <div className="bg-slate-50 border border-slate-200/80 rounded-lg p-3 min-w-0">
+            <div className="text-[10px] uppercase font-mono font-semibold tracking-wider text-slate-500 truncate" title="Parsed Source Rows">
+              Parsed Source Rows
             </div>
-
-            {/* 3. Accepted & Rejected / Quarantined Counts */}
-            <div className="space-y-0.5 col-span-2 sm:col-span-1">
-              <div className="text-[10px] uppercase font-mono font-semibold tracking-wider text-slate-500">
-                Import Quality Status
-              </div>
-              <div className="text-sm font-mono flex items-center gap-2">
-                <span className="font-bold text-emerald-700">
-                  {activeMetadata.validRows.toLocaleString()} Accepted
-                </span>
-                {activeMetadata.rejectedRows > 0 ? (
-                  <span className="text-rose-700 font-medium">
-                    • {activeMetadata.rejectedRows.toLocaleString()} Quarantined
-                  </span>
-                ) : (
-                  <span className="text-slate-400 font-medium">
-                    • 0 Quarantined
-                  </span>
-                )}
-              </div>
-              {activeMetadata.rejectedRows > 0 && (
-                <div className="text-[10px] text-slate-500 font-mono">
-                  Quarantined non-gold/options records
-                </div>
-              )}
+            <div className="text-lg sm:text-xl font-bold font-mono text-slate-900 mt-1">
+              {parsedSourceRows.toLocaleString()}
+            </div>
+            <div className="text-[10px] text-slate-500 font-sans mt-0.5 leading-tight">
+              Total rows read from raw CSVs
             </div>
           </div>
 
-          {/* Compact Secondary Actions Area */}
-          <div className="flex items-center gap-2 flex-wrap shrink-0 border-t md:border-t-0 pt-3 md:pt-0 border-slate-100">
+          {/* 2. Accepted Observations */}
+          <div className="bg-emerald-50/50 border border-emerald-200 rounded-lg p-3 min-w-0">
+            <div className="text-[10px] uppercase font-mono font-semibold tracking-wider text-emerald-800 truncate" title="Accepted Observations">
+              Accepted Observations
+            </div>
+            <div className="text-lg sm:text-xl font-bold font-mono text-emerald-900 mt-1">
+              {activeMetadata.validRows.toLocaleString()}
+            </div>
+            <div className="text-[10px] text-emerald-700 font-sans mt-0.5 leading-tight">
+              Cleaned gold futures records
+            </div>
+          </div>
+
+          {/* 3. Quarantined / Rejected Rows */}
+          <div className="bg-slate-50 border border-slate-200/80 rounded-lg p-3 min-w-0">
+            <div className="text-[10px] uppercase font-mono font-semibold tracking-wider text-slate-500 truncate" title="Quarantined Rows">
+              Quarantined Rows
+            </div>
+            <div className="text-lg sm:text-xl font-bold font-mono text-rose-700 mt-1">
+              {(activeMetadata.rejectedRows || 0).toLocaleString()}
+            </div>
+            <div className="text-[10px] text-slate-500 font-sans mt-0.5 leading-tight">
+              Non-gold commodities & options
+            </div>
+          </div>
+
+          {/* 4. Source Files */}
+          <div className="bg-slate-50 border border-slate-200/80 rounded-lg p-3 min-w-0">
+            <div className="text-[10px] uppercase font-mono font-semibold tracking-wider text-slate-500 truncate" title="Source Files">
+              Source Files
+            </div>
+            <div className="text-lg sm:text-xl font-bold font-mono text-slate-900 mt-1">
+              {sourceFilesCount}
+            </div>
+            <div className="text-[10px] text-slate-500 font-sans mt-0.5 leading-tight">
+              Distinct Bhavcopy CSV files
+            </div>
+          </div>
+
+          {/* 5. Trading Dates */}
+          <div className="bg-slate-50 border border-slate-200/80 rounded-lg p-3 min-w-0 col-span-2 sm:col-span-1">
+            <div className="text-[10px] uppercase font-mono font-semibold tracking-wider text-slate-500 truncate" title="Trading Dates">
+              Trading Dates
+            </div>
+            <div className="text-lg sm:text-xl font-bold font-mono text-slate-900 mt-1">
+              {modeDistinctDates.length}
+            </div>
+            <div className="text-[10px] text-slate-600 font-mono mt-0.5 truncate" title={formattedDateRange}>
+              {formattedDateRange}
+            </div>
+          </div>
+        </div>
+
+        {/* Action Controls Bar - Cleanly separated and wrapping */}
+        <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap">
             {activeMetadata.isUserAttested ? (
               <button
                 onClick={handleRevokeAttestation}
                 className="px-2.5 py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-lg text-xs font-mono transition-colors shadow-xs flex items-center gap-1.5 cursor-pointer"
-                title="Revoke user attestation and return dataset to unverified"
+                title="Revoke user attestation note"
               >
                 <RefreshCw className="w-3.5 h-3.5" />
                 <span>Revoke Attestation</span>
@@ -729,48 +772,6 @@ export const DataLab: React.FC<DataLabProps> = ({
         </div>
       </div>
 
-      {/* Workstream 1: MCX India Bhavcopy Manual Download & Akamai Protection Guide */}
-      <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-3">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
-          <div className="flex items-center gap-2">
-            <ShieldAlert className="w-4 h-4 text-amber-600" />
-            <h3 className="text-sm font-bold text-slate-900 font-mono">
-              Official MCX Bhavcopy Download Guide & Akamai Edge Disclosure
-            </h3>
-          </div>
-          <a
-            href="https://www.mcxindia.com/market-data/bhavcopy"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-mono font-bold text-xs rounded transition-colors self-start sm:self-auto"
-          >
-            <span>Open MCX Bhavcopy Portal</span>
-            <ExternalLink className="w-3.5 h-3.5" />
-          </a>
-        </div>
-
-        <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs text-slate-700 space-y-2">
-          <p className="leading-relaxed">
-            <strong>Why Automated Scrapers Fail:</strong> Multi Commodity Exchange of India (MCX) protects its market data portals using <strong>Akamai Edge Security / Bot Manager</strong>. Direct automated background requests (via <code className="font-mono bg-slate-200 px-1 py-0.5 rounded text-[11px]">curl</code>, python <code className="font-mono bg-slate-200 px-1 py-0.5 rounded text-[11px]">requests</code>, or headless browser automation) receive an immediate <strong className="text-rose-700 font-mono">HTTP 403 Forbidden (Server: AkamaiGHost)</strong> response without active human browser session cookies.
-          </p>
-          <div className="border-t border-slate-200 pt-2">
-            <div className="bg-amber-50/80 border border-amber-200 rounded p-2.5 mb-2.5 text-[11px] text-amber-950 font-mono">
-              <strong>Dataset Coverage Notice:</strong> Currently, 2 authentic trading dates (20-Oct & 21-Oct-2026, 48 observations across GOLDM, GOLDTEN, GOLDGUINEA, GOLDPETAL) are accessible and validated. Approaching the 60-session backtest target requires downloading the remaining daily CSVs from the MCX portal following the steps below. Distinct dates accumulate deterministically in browser storage without overwriting past history.
-            </div>
-            <span className="font-bold text-slate-900 block font-mono text-[11px] uppercase mb-1">
-              Manual Browser Download Instructions (30 Seconds):
-            </span>
-            <ol className="list-decimal pl-5 space-y-1 font-mono text-[11px] text-slate-600">
-              <li>Open <a href="https://www.mcxindia.com/market-data/bhavcopy" target="_blank" rel="noopener noreferrer" className="text-amber-700 underline font-semibold">https://www.mcxindia.com/market-data/bhavcopy</a> in your web browser.</li>
-              <li>Under <strong>Market Type</strong>, select <span className="text-slate-900 font-bold">Futures</span>.</li>
-              <li>Under <strong>Commodity</strong>, select <span className="text-slate-900 font-bold">BULLION / GOLD</span>.</li>
-              <li>Select your trade date in the date picker and click <span className="text-slate-900 font-bold">Show</span>. <span className="text-amber-800 font-semibold">(Important: Wait for the table rows to refresh before clicking CSV. Clicking the CSV icon without clicking Show re-exports the preloaded date under the selected date filename).</span></li>
-              <li>Click the <span className="text-slate-900 font-bold">CSV icon</span> to download the authentic MCX Bhavcopy file.</li>
-              <li>Drag and drop the downloaded file into the upload zone above. AUREX handles all date formats, cleans whitespace, quarantines corrupted OHLC records, normalizes supported contract quotes to a ₹/10 g at 999-purity comparison basis, and stores the records locally in your browser.</li>
-            </ol>
-          </div>
-        </div>
-      </div>
 
       {/* Parsing error display if any */}
       {parseError && (
@@ -783,10 +784,10 @@ export const DataLab: React.FC<DataLabProps> = ({
       )}
 
       {/* Tab Navigation for Data Lab Details */}
-      <div className="border-b border-slate-200 flex items-center gap-2">
+      <div className="border-b border-slate-200 flex items-center gap-2 overflow-x-auto flex-nowrap sm:flex-wrap">
         <button
           onClick={() => setActiveTab('current')}
-          className={`px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors flex items-center gap-1.5 ${
+          className={`px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap ${
             activeTab === 'current'
               ? 'border-amber-500 text-slate-900'
               : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -799,7 +800,7 @@ export const DataLab: React.FC<DataLabProps> = ({
         {parsePreview && (
           <button
             onClick={() => setActiveTab('preview')}
-            className={`px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors flex items-center gap-1.5 ${
+            className={`px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap ${
               activeTab === 'preview'
                 ? 'border-amber-500 text-slate-900'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -813,7 +814,7 @@ export const DataLab: React.FC<DataLabProps> = ({
         {parsePreview && parsePreview.rejectedRows.length > 0 && (
           <button
             onClick={() => setActiveTab('rejected')}
-            className={`px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors flex items-center gap-1.5 ${
+            className={`px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap ${
               activeTab === 'rejected'
                 ? 'border-amber-500 text-slate-900'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -829,13 +830,21 @@ export const DataLab: React.FC<DataLabProps> = ({
       {activeTab === 'current' && (
         <div className="space-y-4">
           <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-            <div className="p-4 bg-slate-50 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-slate-700">
+            <div className="p-4 bg-slate-50 border-b border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-2">
+              <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-slate-700 shrink-0">
                 Discrete Contract Coverage Matrix ({effectiveMode})
               </h3>
-              <span className="text-[11px] font-mono text-slate-500">
-                Mode Valid: {activeMetadata.validRows} | Total Stored: {totalStoredRecords} | Dates in Mode: {modeDistinctDates.length} | Source Files in Mode: {activeMetadata.sourceFiles ? activeMetadata.sourceFiles.length : (effectiveMode === 'IMPORTED_ONLY' ? (importedStoredCount > 0 ? 1 : 0) : 1)} | Duplicates Skipped on Import: {activeMetadata.duplicateCount}
-              </span>
+              <div className="text-[11px] font-mono text-slate-500 flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span>Mode Valid: <strong className="text-slate-800">{activeMetadata.validRows}</strong></span>
+                <span className="text-slate-300">•</span>
+                <span>Total Stored: <strong className="text-slate-800">{totalStoredRecords}</strong></span>
+                <span className="text-slate-300">•</span>
+                <span>Dates in Mode: <strong className="text-slate-800">{modeDistinctDates.length}</strong></span>
+                <span className="text-slate-300">•</span>
+                <span>Files: <strong className="text-slate-800">{activeMetadata.sourceFiles ? activeMetadata.sourceFiles.length : (effectiveMode === 'IMPORTED_ONLY' ? (importedStoredCount > 0 ? 1 : 0) : 1)}</strong></span>
+                <span className="text-slate-300">•</span>
+                <span>Duplicates Skipped: <strong className="text-slate-800">{activeMetadata.duplicateCount}</strong></span>
+              </div>
             </div>
 
             <div className="overflow-x-auto">
@@ -889,8 +898,8 @@ export const DataLab: React.FC<DataLabProps> = ({
           {/* Multi-File Provenance Accumulation Card */}
           {activeMetadata.sourceFiles && activeMetadata.sourceFiles.length > 0 && (
             <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-              <div className="p-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-                <span className="text-xs font-mono font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+              <div className="p-3 bg-slate-50 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <span className="text-xs font-mono font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5 shrink-0">
                   <Database className="w-3.5 h-3.5 text-slate-600" />
                   Historical Source Files ({activeMetadata.sourceFiles.length} Ingested File{activeMetadata.sourceFiles.length === 1 ? '' : 's'})
                 </span>
@@ -955,8 +964,8 @@ export const DataLab: React.FC<DataLabProps> = ({
                   <span className="text-slate-600 ml-1">Imported CSV whose origin has not been independently verified.</span>
                 </div>
                 <div className="p-2 bg-white rounded border border-slate-200">
-                  <span className="font-bold text-teal-800 font-mono">USER-ATTESTED SOURCE — NOT INDEPENDENTLY VERIFIED:</span>
-                  <span className="text-slate-600 ml-1">A user assertion that does not constitute independent verification.</span>
+                  <span className="font-bold text-teal-800 font-mono">USER ATTESTATION RECORDED — NOT INDEPENDENTLY VERIFIED:</span>
+                  <span className="text-slate-600 ml-1">A user origin assertion recorded for local audit trail. Does NOT replace or upgrade source-unverified provenance.</span>
                 </div>
               </div>
             </div>
@@ -1202,32 +1211,35 @@ export const DataLab: React.FC<DataLabProps> = ({
                   Record User Source Attestation
                 </h3>
                 <p className="text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded p-2 mt-1 leading-relaxed">
-                  <strong>Quantitative Integrity Notice:</strong> Uploading a file and recording a source attestation does not independently verify that the file originated from MCX. AUREX currently has no independent official-source verification mechanism. User-attested datasets remain independently unverified.
+                  <strong>Quantitative & Regulatory Integrity Notice:</strong> A user attestation is a personal provenance note. It <strong>never constitutes independent authentication</strong> by MCX, SEBI, or any exchange authority. It <strong>does NOT change unverified data into verified data</strong>, and <strong>does NOT bypass the Decision Engine source-integrity gate or WATCH precaution</strong>. The dataset remains strictly unverified.
                 </p>
               </div>
             </div>
 
             <div className="space-y-3 text-xs">
               <div className="bg-slate-50 p-2.5 rounded border border-slate-200 space-y-1 font-mono text-[11px]">
-                <div>File: <strong className="text-slate-900">{metadata.filename}</strong></div>
-                <div>Imported at: {metadata.importTimestamp}</div>
-                <div>Date Range: {metadata.dateRange.start} → {metadata.dateRange.end}</div>
-                <div>Observations: {metadata.validRows} valid rows</div>
+                <div>File: <strong className="text-slate-900 truncate block max-w-xs">{activeMetadata.filename}</strong></div>
+                <div>Imported at: {activeMetadata.importTimestamp}</div>
+                <div>Date Range: {activeMetadata.dateRange.start} → {activeMetadata.dateRange.end}</div>
+                <div>Observations: {activeMetadata.validRows} valid rows</div>
                 <div className="text-slate-600 text-[10px] pt-1 border-t border-slate-200 mt-1">
-                  Resulting Classification: <span className="font-bold text-teal-800">USER-ATTESTED SOURCE — NOT INDEPENDENTLY VERIFIED</span>
+                  Underlying Source Provenance: <span className="font-bold text-sky-800">USER-IMPORTED DATA — SOURCE UNVERIFIED</span>
+                </div>
+                <div className="text-slate-600 text-[10px]">
+                  Attestation Status: <span className="font-bold text-teal-800">USER ATTESTATION RECORDED — NOT INDEPENDENTLY VERIFIED</span>
                 </div>
               </div>
 
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">
-                  Attestation Statement / Source Reference:
+                  User Origin Reference / Notes:
                 </label>
                 <input
                   type="text"
                   value={attestationNotesInput}
                   onChange={(e) => setAttestationNotesInput(e.target.value)}
                   className="w-full px-2.5 py-1.5 border border-slate-300 rounded text-xs font-mono focus:border-teal-600 focus:outline-none"
-                  placeholder="e.g. MCX official bhavcopy archive file download"
+                  placeholder="e.g. Downloaded from MCX official bhavcopy archive"
                 />
               </div>
             </div>
@@ -1235,16 +1247,16 @@ export const DataLab: React.FC<DataLabProps> = ({
             <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
               <button
                 onClick={() => setShowAttestationModal(false)}
-                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded text-xs"
+                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded text-xs cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 onClick={handleRecordAttestation}
-                className="px-3.5 py-1.5 bg-teal-700 hover:bg-teal-800 text-white font-bold rounded text-xs font-mono flex items-center gap-1.5"
+                className="px-3.5 py-1.5 bg-teal-700 hover:bg-teal-800 text-white font-bold rounded text-xs font-mono flex items-center gap-1.5 cursor-pointer"
               >
                 <CheckCircle2 className="w-3.5 h-3.5" />
-                <span>Record Attestation (Unverified)</span>
+                <span>Save Attestation Note (Remains Unverified)</span>
               </button>
             </div>
           </div>
